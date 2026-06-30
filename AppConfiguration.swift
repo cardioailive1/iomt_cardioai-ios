@@ -4,6 +4,7 @@
 // they live exclusively in the iOS Keychain.
 
 import Foundation
+import os.log
 
 enum AppEnvironment: String {
     case production  = "production"
@@ -55,5 +56,24 @@ struct AppConfiguration {
         ) ?? .production
         appVersion    = info["CFBundleShortVersionString"] as? String ?? "1.0.0"
         buildNumber   = info["CFBundleVersion"] as? String ?? "1"
+    }
+}
+
+// MARK: - Validation
+
+extension AppConfiguration {
+    /// Call on app launch to surface misconfigured URLs in the Xcode console.
+    func validateOrLog() {
+        let log = Logger(subsystem: "com.cardioai.iomt", category: "Config")
+        log.info("[Config] WS  URL: \(backendWSURL.absoluteString)")
+        log.info("[Config] API URL: \(backendAPIURL.absoluteString)")
+        log.info("[Config] Env:     \(environment.rawValue)")
+
+        if backendAPIURL.absoluteString.contains("hospital.local") {
+            log.warning("[Config] ⚠️  API URL still points to placeholder 'cardioai.hospital.local' — update in Xcode scheme environment variables")
+        }
+        if backendAPIURL.scheme == "http" {
+            log.warning("[Config] ⚠️  API URL uses http:// — ATS will block this unless NSAllowsArbitraryLoads is set in Info.plist")
+        }
     }
 }
