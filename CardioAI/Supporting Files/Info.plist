@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.cardioai.iomt.heartbeat</string>
+	</array>
+	<key>CARDIOAI_API_URL</key>
+	<string>$(CARDIOAI_API_URL)</string>
+	<key>CARDIOAI_CLIENT_ID</key>
+	<string>$(CARDIOAI_CLIENT_ID)</string>
+	<key>CARDIOAI_ENVIRONMENT</key>
+	<string>$(CARDIOAI_ENVIRONMENT)</string>
+	<key>CARDIOAI_WS_URL</key>
+	<string>$(CARDIOAI_WS_URL)</string>
+	<key>CFBundleDisplayName</key>
+	<string>CardioAI IOMT</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleName</key>
+	<string>CardioAI</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.2</string>
+	<key>CFBundleVersion</key>
+	<string>4</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>MinimumOSVersion</key>
+	<string>17.0</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+	</dict>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>CardioAI uses Bluetooth to connect to your IoMT wearable device and stream real-time cardiac data.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>CardioAI uses Bluetooth to connect to your cardiac monitoring device.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>CardioAI reads your heart rate and blood pressure to monitor for cardiac events.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>CardioAI writes your IoMT device readings to Apple Health for your records.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+		<string>processing</string>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
+	<key>UIDeviceFamily</key>
+	<array>
+		<integer>1</integer>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UNUserNotificationUsageDescription</key>
+	<string>CardioAI sends critical cardiac alerts that require immediate attention.</string>
+</dict>
+</plist>
