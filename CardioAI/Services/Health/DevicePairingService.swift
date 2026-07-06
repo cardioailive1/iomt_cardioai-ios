@@ -69,6 +69,16 @@ final class DevicePairingService: NSObject, ObservableObject {
     @Published private(set) var lastReading:      DeviceReading? = nil
     @Published private(set) var framesSynced:     Int           = 0
 
+    // Apple Watch / Fitbit are separate, simpler connection states from
+    // the BLE scan/discover/connect flow above — there's no nearby-device
+    // list, just "authorize and start receiving data." Kept as their own
+    // published properties rather than overloading PairingState, which
+    // models BLE-specific states (scanning, discovered devices, RSSI, etc.)
+    // that don't apply here.
+    @Published private(set) var appleWatchConnected: Bool = false
+    @Published private(set) var fitbitConnected:     Bool = false
+    @Published private(set) var fitbitError:         String?
+
     // ── Streams ────────────────────────────────────────────────────────────
     let readingSubject = PassthroughSubject<DeviceReading, Never>()
 
@@ -76,6 +86,8 @@ final class DevicePairingService: NSObject, ObservableObject {
     private let keychainService: KeychainService
     private let bridgeClient:    BridgeClient
     private let apiClient:       APIClient
+    private let healthKitService: HealthKitService
+    private let fitbitService:    FitbitService
 
     // ── BLE internals ──────────────────────────────────────────────────────
     private var centralManager:   CBCentralManager!
@@ -88,11 +100,15 @@ final class DevicePairingService: NSObject, ObservableObject {
     init(
         keychainService: KeychainService,
         bridgeClient:    BridgeClient,
-        apiClient:       APIClient
+        apiClient:       APIClient,
+        healthKitService: HealthKitService,
+        fitbitService:    FitbitService
     ) {
-        self.keychainService = keychainService
-        self.bridgeClient    = bridgeClient
-        self.apiClient       = apiClient
+        self.keychainService  = keychainService
+        self.bridgeClient     = bridgeClient
+        self.apiClient        = apiClient
+        self.healthKitService = healthKitService
+        self.fitbitService    = fitbitService
         super.init()
         centralManager = CBCentralManager(delegate: self, queue: .main)
         patientID      = (try? keychainService.read(.patientID)) ?? ""
@@ -100,6 +116,9 @@ final class DevicePairingService: NSObject, ObservableObject {
         // Restore previously paired device
         pairedDeviceID   = try? keychainService.read(.deviceID)
         pairedDeviceName = pairedDeviceID.map { "Device \($0.prefix(8))" }
+
+        appleWatchConnected = keychainService.exists(.appleWatchDeviceID)
+        fitbitConnected     = keychainService.exists(.fitbitAccessToken)
     }
 
     // MARK: - Scanning
@@ -111,12 +130,33 @@ final class DevicePairingService: NSObject, ObservableObject {
         }
         discoveredDevices = [:]
         pairingState = .scanning
+
+        // NOTE ON TESTING WITHOUT REAL HARDWARE:
+        // Passing `nil` here discovers ANY nearby BLE peripheral, not just
+        // ones advertising the standard Heart Rate/BP/SpO2 GATT services
+        // below. This is useful for validating the scan → list → connect
+        // UI flow in TestFlight when no compliant hardware is on hand yet.
+        //
+        // Caveat: connecting to a non-compliant device (e.g. AirPods, a
+        // random BLE speaker) will succeed at the CoreBluetooth level, but
+        // won't produce any readings — parseCharacteristic() below only
+        // understands the standard Heart Rate/BP/SpO2 characteristic UUIDs,
+        // so `didUpdateValueFor` simply won't fire for anything else. It's
+        // genuinely useful for confirming pairing mechanics, not for
+        // confirming vitals actually stream.
+        //
+        // For production, restore the withServices: filter (the array
+        // below) so the scan only surfaces compliant health devices, which
+        // is both faster and avoids showing irrelevant nearby BLE clutter
+        // to patients.
+        let restrictToHealthServices = false  // ← set true for production
+
         centralManager.scanForPeripherals(
-            withServices: [
+            withServices: restrictToHealthServices ? [
                 CardioAIBLEService.primaryService,
                 CardioAIBLEService.bloodPressure,
                 CardioAIBLEService.pulseOximeter,
-            ],
+            ] : nil,
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
         // Stop scanning after 15 seconds
@@ -153,6 +193,112 @@ final class DevicePairingService: NSObject, ObservableObject {
         isStreaming       = false
         connectedPeripheral = nil
         pairingState        = .idle
+    }
+
+    // MARK: - Apple Watch (via HealthKit)
+    //
+    // Unlike BLE, there's no "scan and pick a device" step — Apple Watch
+    // heart rate data lives in HealthKit once the user grants read access.
+    // This registers a stable pseudo-device (device_type: "activity_tracker")
+    // with the backend and starts streaming every new HealthKit heart rate
+    // sample through the exact same pushReadingToBackend() pipeline BLE
+    // devices use, so it flows through the 7-agent clinical pipeline
+    // identically regardless of source.
+
+    func connectAppleWatch() async {
+        await healthKitService.requestAuthorization()
+        guard healthKitService.isHeartRateReadAuthorized else {
+            pairingState = .failed("Health access was not granted. Enable it in Settings → Health → Data Access & Devices → CardioAI.")
+            return
+        }
+
+        // Stable per-installation pseudo-device ID, generated once and
+        // reused across app launches so the backend sees one consistent
+        // device rather than a new registration every time.
+        let deviceID: String
+        if let existing = try? keychainService.read(.appleWatchDeviceID) {
+            deviceID = existing
+        } else {
+            deviceID = "apple-watch-\(UUID().uuidString)"
+            try? keychainService.save(deviceID, for: .appleWatchDeviceID)
+        }
+
+        await registerDeviceWithBackend(
+            deviceID:   deviceID,
+            deviceType: "activity_tracker",
+            deviceName: "Apple Watch"
+        )
+
+        appleWatchConnected = true
+
+        healthKitService.startObservingHeartRate { [weak self] bpm, sourceName, date in
+            guard let self else { return }
+            Task { @MainActor in
+                let reading = DeviceReading(
+                    deviceID:    deviceID,
+                    deviceType:  "activity_tracker",
+                    vitals:      ["heart_rate": bpm],
+                    qualityScore: 0.9,
+                    timestamp:   date
+                )
+                self.pushReadingToBackend(reading)
+            }
+        }
+    }
+
+    func disconnectAppleWatch() {
+        healthKitService.stopObservingHeartRate()
+        appleWatchConnected = false
+    }
+
+    // MARK: - Fitbit (via OAuth2 Web API)
+    //
+    // See FitbitService.swift for why this looks different from BLE/Apple
+    // Watch (cloud OAuth2 + polling rather than local streaming). Same
+    // destination pipeline as everything else: pushReadingToBackend().
+
+    func connectFitbit() async {
+        await fitbitService.connect()
+        guard fitbitService.isConnected else {
+            fitbitError = fitbitService.lastError
+            return
+        }
+
+        let deviceID: String
+        if let existing = try? keychainService.read(.fitbitDeviceID) {
+            deviceID = existing
+        } else {
+            deviceID = "fitbit-\(UUID().uuidString)"
+            try? keychainService.save(deviceID, for: .fitbitDeviceID)
+        }
+
+        await registerDeviceWithBackend(
+            deviceID:   deviceID,
+            deviceType: "activity_tracker",
+            deviceName: "Fitbit"
+        )
+
+        fitbitConnected = true
+        fitbitError      = nil
+
+        fitbitService.startPolling { [weak self] sample in
+            guard let self else { return }
+            Task { @MainActor in
+                let reading = DeviceReading(
+                    deviceID:    deviceID,
+                    deviceType:  "activity_tracker",
+                    vitals:      ["heart_rate": sample.bpm],
+                    qualityScore: 0.85,  // polled, not real-time — slightly lower confidence
+                    timestamp:   sample.timestamp
+                )
+                self.pushReadingToBackend(reading)
+            }
+        }
+    }
+
+    func disconnectFitbit() {
+        fitbitService.disconnect()
+        fitbitConnected = false
     }
 
     // MARK: - Register device with backend
@@ -285,7 +431,11 @@ extension DevicePairingService: CBCentralManagerDelegate {
     }
 
     private func inferDeviceType(from peripheral: CBPeripheral) -> String {
-        let name = peripheral.name?.lowercased() ?? ""
+        let rawName = peripheral.name ?? ""
+        if let known = KnownBLEDevices.match(name: rawName) {
+            return known.deviceType
+        }
+        let name = rawName.lowercased()
         if name.contains("ecg") || name.contains("heart") { return "ecg_monitor" }
         if name.contains("bp") || name.contains("pressure") { return "bp_monitor" }
         if name.contains("spo") || name.contains("ox") { return "pulse_oximeter" }

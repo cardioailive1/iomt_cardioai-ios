@@ -29,6 +29,11 @@ struct DevicePairingView: View {
                         // Action button
                         actionButton
 
+                        // Apple Watch & Fitbit — separate from BLE scanning,
+                        // since both connect via authorization rather than
+                        // discovering a nearby physical device.
+                        ExternalSourcesSection()
+
                         // Device list (when scanning found devices)
                         if case .discovered(let devices) = pairingService.pairingState {
                             DeviceListSection(devices: devices)
@@ -148,6 +153,116 @@ struct DevicePairingView: View {
     }
 }
 
+// MARK: - External Sources Section (Apple Watch / Fitbit)
+
+struct ExternalSourcesSection: View {
+    @EnvironmentObject var pairingService: DevicePairingService
+    @State private var isConnectingWatch  = false
+    @State private var isConnectingFitbit = false
+
+    // Fitbit hidden until FitbitService is migrated from the legacy Fitbit
+    // Web API (sunsets Sept 2026, new-app registration closed) to the new
+    // Google Health API. Flip to true once that rewrite lands.
+    private let fitbitEnabled = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("OTHER DATA SOURCES")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+                .tracking(1)
+
+            // Apple Watch
+            HStack(spacing: 14) {
+                Image(systemName: "applewatch")
+                    .font(.title2)
+                    .foregroundStyle(pairingService.appleWatchConnected ? ColorPalette.cardioGreen : ColorPalette.brandBlue)
+                    .frame(width: 36)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Apple Watch")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(ColorPalette.ink)
+                    Text(pairingService.appleWatchConnected ? "Connected — syncing heart rate" : "Reads heart rate from Apple Health")
+                        .font(.caption2)
+                        .foregroundStyle(ColorPalette.inkSoft)
+                }
+                Spacer()
+
+                if isConnectingWatch {
+                    ProgressView().tint(ColorPalette.brandBlue)
+                } else if pairingService.appleWatchConnected {
+                    Button("Disconnect") { pairingService.disconnectAppleWatch() }
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                } else {
+                    Button("Connect") {
+                        isConnectingWatch = true
+                        Task {
+                            await pairingService.connectAppleWatch()
+                            isConnectingWatch = false
+                        }
+                    }
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(ColorPalette.brandBlue)
+                }
+            }
+            .padding(14)
+            .cardSurface(cornerRadius: 12)
+
+            // Fitbit
+            if fitbitEnabled {
+            HStack(spacing: 14) {
+                Image(systemName: "figure.walk.circle")
+                    .font(.title2)
+                    .foregroundStyle(pairingService.fitbitConnected ? ColorPalette.cardioGreen : ColorPalette.brandBlue)
+                    .frame(width: 36)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Fitbit")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(ColorPalette.ink)
+                    Text(pairingService.fitbitConnected ? "Connected — syncing heart rate" : "Sign in with your Fitbit account")
+                        .font(.caption2)
+                        .foregroundStyle(ColorPalette.inkSoft)
+                    if let error = pairingService.fitbitError {
+                        Text(error)
+                            .font(.caption2)
+                            .foregroundStyle(.red)
+                    }
+                }
+                Spacer()
+
+                if isConnectingFitbit {
+                    ProgressView().tint(ColorPalette.brandBlue)
+                } else if pairingService.fitbitConnected {
+                    Button("Disconnect") { pairingService.disconnectFitbit() }
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                } else {
+                    Button("Connect") {
+                        isConnectingFitbit = true
+                        Task {
+                            await pairingService.connectFitbit()
+                            isConnectingFitbit = false
+                        }
+                    }
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(ColorPalette.brandBlue)
+                }
+            }
+            .padding(14)
+            .cardSurface(cornerRadius: 12)
+            }
+        }
+    }
+}
+
 // MARK: - Pairing Status Card
 
 struct PairingStatusCard: View {
@@ -232,7 +347,7 @@ struct PairingStatusCard: View {
     private var statusSubtitle: String {
         switch state {
         case .idle:                   return "Tap Scan to find your device"
-        case .scanning:               return "Looking for CardioAI devices nearby..."
+        case .scanning:               return "Looking for nearby Bluetooth devices..."
         case .discovered:             return "Select your device below"
         case .connecting:             return "Establishing secure connection..."
         case .connected:              return "Discovering device capabilities..."
@@ -271,6 +386,11 @@ struct DeviceListSection: View {
                                 .font(.subheadline)
                                 .fontWeight(.semibold)
                                 .foregroundStyle(ColorPalette.ink)
+                            if let known = KnownBLEDevices.match(name: device.name) {
+                                Text(known.displayLabel)
+                                    .font(.caption2)
+                                    .foregroundStyle(ColorPalette.brandBlue)
+                            }
                             Text(device.id.uuidString.prefix(8).uppercased())
                                 .font(.caption2)
                                 .foregroundStyle(ColorPalette.inkSoft)
@@ -291,6 +411,9 @@ struct DeviceListSection: View {
     }
 
     private func deviceIcon(name: String) -> String {
+        if let known = KnownBLEDevices.match(name: name) {
+            return known.icon
+        }
         let n = name.lowercased()
         if n.contains("ecg") || n.contains("heart") { return "waveform.path.ecg" }
         if n.contains("bp") || n.contains("pressure") { return "heart.circle.fill" }

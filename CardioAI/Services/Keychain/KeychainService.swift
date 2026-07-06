@@ -17,6 +17,10 @@ enum KeychainKey: String {
     case userRole        = "com.cardioai.iomt.user_role"
     case userName        = "com.cardioai.iomt.user_name"
     case userEmail       = "com.cardioai.iomt.user_email"
+    case appleWatchDeviceID  = "com.cardioai.iomt.apple_watch_device_id"
+    case fitbitDeviceID      = "com.cardioai.iomt.fitbit_device_id"
+    case fitbitAccessToken   = "com.cardioai.iomt.fitbit_access_token"
+    case fitbitRefreshToken  = "com.cardioai.iomt.fitbit_refresh_token"
 }
 
 enum KeychainError: LocalizedError {

@@ -27,6 +27,7 @@ final class DependencyContainer: ObservableObject {
     // ── Services ───────────────────────────────────────────────────────────
     let keychainService:     KeychainService
     let healthKitService:    HealthKitService
+    let fitbitService:       FitbitService
 
     private init() {
         keychainService      = KeychainService()
@@ -39,11 +40,14 @@ final class DependencyContainer: ObservableObject {
                                               authService: authService)
         alertStore           = AlertStore(apiClient: apiClient)
         deviceStore          = DeviceStore(apiClient: apiClient)
-        devicePairingService = DevicePairingService(
-            keychainService: keychainService,
-            bridgeClient:    bridgeClient,
-            apiClient:       apiClient
-        )
         healthKitService     = HealthKitService()
+        fitbitService        = FitbitService(keychainService: keychainService)
+        devicePairingService = DevicePairingService(
+            keychainService:  keychainService,
+            bridgeClient:     bridgeClient,
+            apiClient:        apiClient,
+            healthKitService: healthKitService,
+            fitbitService:    fitbitService
+        )
     }
 }

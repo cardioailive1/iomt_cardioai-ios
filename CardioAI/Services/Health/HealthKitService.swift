@@ -15,9 +15,100 @@ final class HealthKitService {
         HKQuantityType(.bloodPressureDiastolic),
     ]
 
+    // Read types for pulling Apple Watch (or any HealthKit-writing device,
+    // e.g. Fitbit's own Health app integration) heart rate data INTO the
+    // app, separate from writeTypes above which push CardioAI's own RPM
+    // data OUT to Apple Health for the patient's GP to see.
+    private let readTypes: Set<HKObjectType> = [
+        HKQuantityType(.heartRate),
+    ]
+
+    private var heartRateQuery: HKQuery?
+    private var heartRateAnchor: HKQueryAnchor?
+
     func requestAuthorization() async {
         guard HKHealthStore.isHealthDataAvailable() else { return }
-        try? await store.requestAuthorization(toShare: writeTypes, read: [])
+        try? await store.requestAuthorization(toShare: writeTypes, read: readTypes)
+    }
+
+    /// True if the user has actually granted read access to heart rate —
+    /// requestAuthorization() can succeed at the OS level while the user
+    /// still denies specific types, so check this before relying on data
+    /// actually arriving.
+    var isHeartRateReadAuthorized: Bool {
+        store.authorizationStatus(for: HKQuantityType(.heartRate)) != .notDetermined
+    }
+
+    /// Starts observing new heart rate samples as Apple Watch (or any
+    /// source writing to HealthKit) produces them. `onSample` is called
+    /// with (bpm, sourceName, date) for every new sample, including an
+    /// initial batch of recent samples when first called.
+    ///
+    /// Uses HKAnchoredObjectQuery (incremental, only NEW samples since the
+    /// last anchor) wrapped in an HKObserverQuery so updates keep flowing
+    /// even while the app is backgrounded, provided background delivery is
+    /// enabled (see enableBackgroundDelivery below).
+    func startObservingHeartRate(onSample: @escaping (Double, String, Date) -> Void) {
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+        let heartRateType = HKQuantityType(.heartRate)
+
+        let observer = HKObserverQuery(sampleType: heartRateType, predicate: nil) { [weak self] _, completionHandler, error in
+            guard error == nil else {
+                logger_ios.warning("[HealthKit] observer query error: \(error!.localizedDescription)")
+                completionHandler()
+                return
+            }
+            self?.fetchNewHeartRateSamples(onSample: onSample, completion: completionHandler)
+        }
+        store.execute(observer)
+        heartRateQuery = observer
+
+        store.enableBackgroundDelivery(for: heartRateType, frequency: .immediate) { success, error in
+            if let error {
+                logger_ios.warning("[HealthKit] background delivery enable failed: \(error.localizedDescription)")
+            } else {
+                logger_ios.info("[HealthKit] background delivery enabled=\(success)")
+            }
+        }
+
+        // Fetch an initial batch immediately so the pairing screen shows
+        // something right away rather than waiting for the next Watch
+        // measurement (which can be minutes away).
+        fetchNewHeartRateSamples(onSample: onSample, completion: {})
+    }
+
+    func stopObservingHeartRate() {
+        if let heartRateQuery {
+            store.stop(heartRateQuery)
+        }
+        heartRateQuery  = nil
+        heartRateAnchor = nil
+    }
+
+    private func fetchNewHeartRateSamples(
+        onSample: @escaping (Double, String, Date) -> Void,
+        completion: @escaping () -> Void
+    ) {
+        let heartRateType = HKQuantityType(.heartRate)
+        let query = HKAnchoredObjectQuery(
+            type: heartRateType,
+            predicate: nil,
+            anchor: heartRateAnchor,
+            limit: HKObjectQueryNoLimit
+        ) { [weak self] _, samplesOrNil, _, newAnchor, error in
+            defer { completion() }
+            guard error == nil, let samples = samplesOrNil as? [HKQuantitySample] else {
+                if let error { logger_ios.warning("[HealthKit] anchored query error: \(error.localizedDescription)") }
+                return
+            }
+            self?.heartRateAnchor = newAnchor
+            for sample in samples {
+                let bpm = sample.quantity.doubleValue(for: .count().unitDivided(by: .minute()))
+                let sourceName = sample.sourceRevision.source.name
+                onSample(bpm, sourceName, sample.endDate)
+            }
+        }
+        store.execute(query)
     }
 
     func writeFrame(_ frame: RPMFrame) async {
