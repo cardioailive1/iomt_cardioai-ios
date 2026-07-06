@@ -123,6 +123,16 @@ final class DashboardViewModel: ObservableObject {
             }
         }
     }
+
+    // MARK: Derived UI state
+
+    /// Overall risk banner state, derived from active alerts + latest vitals.
+    var riskStatus: RiskStatus {
+        if alerts.contains(where: { $0.alertLevel == .critical }) { return .high }
+        if alerts.contains(where: { $0.alertLevel == .high || $0.alertLevel == .medium }) { return .moderate }
+        if let hr = latestFrame?.heartRate, hr < 50 || hr > 120 { return .moderate }
+        return .stable
+    }
 }
 
 // ── Supporting types ──────────────────────────────────────────────────────
@@ -131,6 +141,18 @@ struct VitalSample: Identifiable {
     let id        = UUID()
     let timestamp: Date
     let value:     Double
+}
+
+enum RiskStatus {
+    case stable, moderate, high
+    var label: String { switch self { case .stable: "Stable"; case .moderate: "Moderate"; case .high: "High" } }
+    var color: Color {
+        switch self {
+        case .stable:   ColorPalette.cardioGreen
+        case .moderate: ColorPalette.statusModerate
+        case .high:     ColorPalette.cardioRed
+        }
+    }
 }
 
 extension AlertLevel {
@@ -168,62 +190,96 @@ struct DashboardView: View {
         )
     }()
 
+    private var greeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<12:  return "Good morning,"
+        case 12..<17: return "Good afternoon,"
+        case 17..<22: return "Good evening,"
+        default:      return "Good night,"
+        }
+    }
+
+    private var firstName: String {
+        guard let name = authService.currentUser?.displayName, !name.isEmpty else { return "User" }
+        return name.components(separatedBy: " ").first ?? name
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 18) {
+                VStack(spacing: 20) {
 
-                    if let user = authService.currentUser {
-                        PatientGreetingBanner(user: user,
-                                              isStreaming: pairingService.isStreaming,
-                                              lastUpdated: vm.lastUpdated)
-                            .padding(.horizontal)
+                    // Greeting
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(greeting)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(ColorPalette.inkSoft)
+                        Text(firstName)
+                            .font(.system(size: 26, weight: .heavy))
+                            .tracking(-0.6)
+                            .foregroundStyle(ColorPalette.ink)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
 
-                    ConnectionStatusRow(
-                        wsLabel:      sessionManager.connectionLabel,
-                        wsConnected:  sessionManager.isConnected,
-                        bleStreaming: pairingService.isStreaming,
-                        framesSynced: pairingService.framesSynced
+                    // Connection / device status (WS auth, BLE stream, HMAC provisioning)
+                    DashboardStatusStrip(
+                        deviceStreaming: pairingService.isStreaming,
+                        framesSynced:    pairingService.framesSynced,
+                        wsLabel:         sessionManager.connectionLabel,
+                        wsConnected:     sessionManager.isConnected,
+                        lastUpdated:     vm.lastUpdated
                     )
-                    .padding(.horizontal)
 
                     if let error = vm.lastError {
-                        ErrorBanner(message: error).padding(.horizontal)
+                        ErrorBanner(message: error).padding(.horizontal, 16)
                     }
 
-                    LiveVitalsSection(frame: vm.latestFrame)
+                    // Hero status
+                    HeroStatusCard(
+                        bpm:          vm.latestFrame?.heartRate,
+                        risk:         vm.riskStatus,
+                        isStreaming:  pairingService.isStreaming,
+                        sourceLabel:  pairingService.isStreaming ? "Live · sensor" : "No device"
+                    )
+                    .padding(.horizontal, 16)
 
-                    if !vm.hrHistory.isEmpty {
-                        HRSparklineCard(history: vm.hrHistory).padding(.horizontal)
-                    }
+                    // Vitals
+                    VitalsGridSection(frame: vm.latestFrame, hrHistory: vm.hrHistory)
+                        .padding(.horizontal, 16)
 
+                    // Active alerts
                     if !vm.alerts.isEmpty {
-                        AlertFeedSection(alerts: vm.alerts)
+                        AlertsCardSection(alerts: vm.alerts).padding(.horizontal, 16)
                     }
 
+                    // System status
                     if let status = vm.bridgeStatus {
-                        BridgeStatsSection(status: status)
+                        SystemStatusSection(status: status).padding(.horizontal, 16)
                     }
 
+                    // Recent reports
                     if !vm.reports.isEmpty {
-                        RecentReportsSection(reports: Array(vm.reports.prefix(5)))
+                        ReportsCardSection(reports: Array(vm.reports.prefix(5)))
+                            .padding(.horizontal, 16)
                     }
 
-                    Spacer(minLength: 20)
+                    Spacer(minLength: 12)
                 }
-                .padding(.vertical, 12)
+                .padding(.vertical, 8)
             }
             .background(ColorPalette.screenBackground.ignoresSafeArea())
-            .navigationTitle("Dashboard")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) { DashboardBrandMark() }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if vm.isRefreshing {
                         ProgressView().scaleEffect(0.8)
                     } else {
                         Button { Task { await vm.refresh() } } label: {
-                            Image(systemName: "arrow.clockwise")
+                            Image(systemName: "arrow.clockwise").foregroundStyle(ColorPalette.ink)
                         }
                     }
                 }
@@ -236,319 +292,421 @@ struct DashboardView: View {
 }
 
 // ============================================================================
-// MARK: - Patient Greeting Banner
+// MARK: - Brand mark (nav bar)
 // ============================================================================
 
-struct PatientGreetingBanner: View {
-    let user: AuthUser; let isStreaming: Bool; let lastUpdated: Date?
-
-    private var firstName: String {
-        user.displayName.components(separatedBy: " ").first ?? user.displayName
-    }
-
+struct DashboardBrandMark: View {
     var body: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Hello, \(firstName)")
-                    .font(.title2.bold())
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(isStreaming ? Color.green : Color.orange)
-                        .frame(width: 7, height: 7)
-                    Text(isStreaming ? "Device connected & syncing" : "No device connected")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                if let ts = lastUpdated {
-                    Text("Updated \(ts, style: .relative) ago")
-                        .font(.caption2).foregroundStyle(.tertiary)
-                }
-            }
-            Spacer()
-            ZStack {
-                Circle().fill(ColorPalette.brandBlue.opacity(0.12)).frame(width: 52, height: 52)
-                Image(systemName: "person.crop.circle.fill")
-                    .font(.system(size: 36)).foregroundStyle(ColorPalette.brandBlue)
-            }
+        HStack(spacing: 8) {
+            CardioLogoMark(size: 28)
+//            (Text("Cardio").foregroundStyle(ColorPalette.ink)
+//             + Text("AI").foregroundStyle(ColorPalette.brandBlue))
+//                .font(.system(size: 18, weight: .heavy))
+//                .tracking(-0.3)
         }
     }
 }
 
 // ============================================================================
-// MARK: - Connection Status Row
+// MARK: - Connection / device status strip
 // ============================================================================
 
-struct ConnectionStatusRow: View {
-    let wsLabel: String; let wsConnected: Bool
-    let bleStreaming: Bool; let framesSynced: Int
+struct DashboardStatusStrip: View {
+    let deviceStreaming: Bool
+    let framesSynced: Int
+    let wsLabel: String
+    let wsConnected: Bool
+    let lastUpdated: Date?
 
     var body: some View {
-        HStack(spacing: 10) {
-            StatusChip(icon: "antenna.radiowaves.left.and.right",
-                       label: wsLabel, isActive: wsConnected,
-                       color: wsConnected ? .green : .secondary)
-            StatusChip(icon: "sensor.tag.radiowaves.forward.fill",
-                       label: bleStreaming ? "\(framesSynced) frames" : "BLE offline",
-                       isActive: bleStreaming,
-                       color: bleStreaming ? .green : .secondary)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                // Device pairing / streaming state
+                StatusChip(
+                    icon: deviceStreaming ? "sensor.tag.radiowaves.forward.fill" : "sensor.tag.radiowaves.forward",
+                    label: deviceStreaming ? "Device connected & syncing" : "No device connected",
+                    active: deviceStreaming,
+                    color: deviceStreaming ? ColorPalette.cardioGreen : ColorPalette.inkMute
+                )
+                // WebSocket / HMAC auth state (surfaces "Failed: HMAC secret not provisioned")
+                StatusChip(
+                    icon: "antenna.radiowaves.left.and.right",
+                    label: wsLabel,
+                    active: wsConnected,
+                    color: wsConnected ? ColorPalette.cardioGreen : ColorPalette.cardioAmber
+                )
+                // BLE frame stream
+                StatusChip(
+                    icon: "dot.radiowaves.left.and.right",
+                    label: deviceStreaming ? "\(framesSynced) frames" : "BLE offline",
+                    active: deviceStreaming,
+                    color: deviceStreaming ? ColorPalette.cardioGreen : ColorPalette.inkMute
+                )
+                if let ts = lastUpdated {
+                    StatusChip(
+                        icon: "clock",
+                        label: "Updated \(relativeAgo(ts))",
+                        active: false,
+                        color: ColorPalette.inkMute
+                    )
+                }
+            }
+            .padding(.horizontal, 20)
         }
+    }
+
+    private func relativeAgo(_ date: Date) -> String {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .short
+        return f.localizedString(for: date, relativeTo: Date())
     }
 }
 
 struct StatusChip: View {
-    let icon: String; let label: String; let isActive: Bool; let color: Color
-
+    let icon: String; let label: String; let active: Bool; let color: Color
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: icon).font(.caption).foregroundStyle(color)
-            Text(label).font(.caption).foregroundStyle(isActive ? .primary : .secondary).lineLimit(1)
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(color)
+            Text(label)
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(active ? ColorPalette.ink : ColorPalette.inkSoft)
+                .lineLimit(1)
         }
-        .padding(.horizontal, 10).padding(.vertical, 6)
-        .background(color.opacity(isActive ? 0.1 : 0.04), in: Capsule())
-        .overlay(Capsule().stroke(color.opacity(isActive ? 0.3 : 0.1), lineWidth: 1))
+        .padding(.horizontal, 11).padding(.vertical, 7)
+        .background(color.opacity(active ? 0.12 : 0.08), in: Capsule())
+        .overlay(Capsule().stroke(color.opacity(active ? 0.30 : 0.15), lineWidth: 1))
     }
 }
 
 // ============================================================================
-// MARK: - Error Banner
+// MARK: - Section title (design language: 15/700 + trailing link)
 // ============================================================================
 
-struct ErrorBanner: View {
-    let message: String
+struct DSectionTitle<Trailing: View>: View {
+    let title: String
+    var accent: String? = nil
+    var accentColor: Color = ColorPalette.cardioRed
+    @ViewBuilder var trailing: () -> Trailing
+
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.caption)
-            Text("Could not refresh: \(message)").font(.caption).foregroundStyle(.secondary).lineLimit(2)
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.system(size: 15, weight: .bold))
+                    .tracking(-0.1)
+                    .foregroundStyle(ColorPalette.ink)
+                if let accent {
+                    Text("· \(accent)")
+                        .font(.system(size: 15, weight: .heavy))
+                        .foregroundStyle(accentColor)
+                }
+            }
+            Spacer(minLength: 8)
+            trailing()
         }
-        .padding(.horizontal, 12).padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.orange.opacity(0.2), lineWidth: 1))
+        .padding(.horizontal, 6)
+    }
+}
+
+extension DSectionTitle where Trailing == EmptyView {
+    init(_ title: String, accent: String? = nil, accentColor: Color = ColorPalette.cardioRed) {
+        self.init(title: title, accent: accent, accentColor: accentColor) { EmptyView() }
+    }
+}
+
+private struct LinkLabel: View {
+    let text: String
+    var body: some View {
+        Text(text)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(ColorPalette.brandBlue)
     }
 }
 
 // ============================================================================
-// MARK: - Live Vitals Section
+// MARK: - Sparkline
 // ============================================================================
 
-struct LiveVitalsSection: View {
+struct Sparkline: Shape {
+    let points: [Double]
+    func path(in rect: CGRect) -> Path {
+        guard points.count > 1 else { return Path() }
+        let mn = points.min() ?? 0
+        let mx = points.max() ?? 1
+        let range = (mx - mn) == 0 ? 1 : (mx - mn)
+        var p = Path()
+        for (i, v) in points.enumerated() {
+            let x = rect.width * CGFloat(i) / CGFloat(points.count - 1)
+            let y = rect.height * (1 - CGFloat((v - mn) / range))
+            if i == 0 { p.move(to: CGPoint(x: x, y: y)) }
+            else      { p.addLine(to: CGPoint(x: x, y: y)) }
+        }
+        return p
+    }
+}
+
+// ============================================================================
+// MARK: - Hero Status Card
+// ============================================================================
+
+struct HeroStatusCard: View {
+    let bpm: Double?
+    let risk: RiskStatus
+    let isStreaming: Bool
+    let sourceLabel: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+
+            // Top row: title + risk pill
+            HStack {
+                Text("TODAY'S STATUS")
+                    .font(.system(size: 12, weight: .semibold))
+                    .tracking(1)
+                    .foregroundStyle(.white.opacity(0.85))
+                Spacer()
+                HStack(spacing: 6) {
+                    Circle().fill(risk.color).frame(width: 7, height: 7)
+                    Text(risk.label)
+                        .font(.system(size: 11.5, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(.white.opacity(0.18), in: Capsule())
+            }
+            .padding(.bottom, 16)
+
+            // BPM row
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(.white.opacity(0.18))
+                        .frame(width: 52, height: 52)
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 24))
+                        .foregroundStyle(.white)
+                        .symbolEffect(.pulse, options: .repeating, isActive: isStreaming)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .lastTextBaseline, spacing: 6) {
+                        Text(bpm.map { String(format: "%.0f", $0) } ?? "--")
+                            .font(.system(size: 40, weight: .heavy))
+                            .tracking(-1.2)
+                            .foregroundStyle(.white)
+                            .contentTransition(.numericText())
+                            .animation(.spring(duration: 0.4), value: bpm)
+                        Text("bpm")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(isStreaming ? ColorPalette.liveGreen : .white.opacity(0.6))
+                            .frame(width: 6, height: 6)
+                        Text(sourceLabel)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
+                }
+                Spacer()
+            }
+        }
+        .padding(22)
+        .background(
+            LinearGradient(
+                colors: [ColorPalette.brandBlue, ColorPalette.blueDark],
+                startPoint: UnitPoint(x: 0.15, y: 0.0),
+                endPoint:   UnitPoint(x: 0.85, y: 1.0)
+            ),
+            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+        )
+        .overlay(alignment: .topTrailing) {
+            // Decorative ECG pulse line
+            Sparkline(points: [40, 40, 18, 62, 32, 48, 40, 40, 46, 40, 40])
+                .stroke(.white.opacity(0.18),
+                        style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                .frame(width: 170, height: 70)
+                .padding(.top, 14).padding(.trailing, 4)
+                .allowsHitTesting(false)
+        }
+        .shadow(color: ColorPalette.brandBlue.opacity(0.28), radius: 16, x: 0, y: 10)
+    }
+}
+
+// ============================================================================
+// MARK: - Vitals Grid
+// ============================================================================
+
+struct VitalsGridSection: View {
     let frame: RPMFrame?
+    let hrHistory: [VitalSample]
+
+    private var hrSpark: [Double] {
+        let vals = hrHistory.suffix(24).map(\.value)
+        return vals.count > 1 ? Array(vals) : [72, 74, 71, 76, 73, 70, 74, 72]
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(title: "Live Vitals", systemImage: "waveform.path.ecg").padding(.horizontal)
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                VitalCard(title: "Heart Rate",
-                          value: frame?.heartRate.map { String(format: "%.0f", $0) } ?? "--",
-                          unit: "bpm", icon: "heart.fill", color: hrColor)
-                VitalCard(title: "Blood Pressure", value: bpString,
-                          unit: "mmHg", icon: "waveform.path.ecg", color: bpColor)
-                VitalCard(title: "SpO₂",
-                          value: frame?.spo2.map { String(format: "%.0f", $0) } ?? "--",
-                          unit: "%", icon: "lungs.fill", color: spo2Color)
-                VitalCard(title: "Data Quality",
-                          value: frame.map { String(format: "%.0f", $0.qualityScore * 100) } ?? "--",
-                          unit: "%", icon: "checkmark.seal.fill", color: qualityColor)
+            DSectionTitle(title: "Vitals") {
+//                LinkLabel(text: "View all")
             }
-            .padding(.horizontal)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10),
+                                GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                VitalTile(
+                    icon: "heart.fill",
+                    tint: ColorPalette.redSoft, color: ColorPalette.cardioRed,
+                    label: "Heart rate", live: true,
+                    value: frame?.heartRate.map { String(format: "%.0f", $0) } ?? "--",
+                    unit: "bpm", spark: hrSpark
+                )
+                VitalTile(
+                    icon: "waveform.path.ecg",
+                    tint: ColorPalette.blueSoft, color: ColorPalette.brandBlue,
+                    label: "Blood pressure", live: false,
+                    value: bpString, unit: "mmHg",
+                    spark: [118, 121, 119, 122, 117, 120, 119]
+                )
+                VitalTile(
+                    icon: "lungs.fill",
+                    tint: ColorPalette.oxygenSoft, color: ColorPalette.oxygenCyan,
+                    label: "Oxygen sat.", live: false,
+                    value: frame?.spo2.map { String(format: "%.0f", $0) } ?? "--",
+                    unit: "%", spark: [97, 98, 98, 99, 97, 98, 98]
+                )
+                VitalTile(
+                    icon: "checkmark.seal.fill",
+                    tint: ColorPalette.greenSoft, color: ColorPalette.cardioGreen,
+                    label: "Data quality", live: false,
+                    value: frame.map { String(format: "%.0f", $0.qualityScore * 100) } ?? "--",
+                    unit: "%", spark: [88, 92, 90, 95, 93, 96, 94]
+                )
+            }
         }
     }
 
-    private var hrColor: Color {
-        guard let hr = frame?.heartRate else { return .secondary }
-        return hr < 50 || hr > 130 ? .red : hr < 60 || hr > 100 ? .orange : .green
-    }
-    private var bpColor: Color {
-        guard let s = frame?.systolic else { return .secondary }
-        return s >= 180 ? .red : s >= 130 ? .orange : .green
-    }
-    private var spo2Color: Color {
-        guard let o = frame?.spo2 else { return .secondary }
-        return o < 90 ? .red : o < 94 ? .orange : .blue
-    }
-    private var qualityColor: Color {
-        guard let q = frame?.qualityScore else { return .secondary }
-        return q < 0.6 ? .red : q < 0.8 ? .orange : .green
-    }
     private var bpString: String {
         guard let s = frame?.systolic, let d = frame?.diastolic else { return "--" }
         return String(format: "%.0f/%.0f", s, d)
     }
 }
 
-// ============================================================================
-// MARK: - Vital Card
-// ============================================================================
-
-struct VitalCard: View {
-    let title: String; let value: String; let unit: String
-    let icon: String;  let color: Color
+struct VitalTile: View {
+    let icon: String
+    let tint: Color
+    let color: Color
+    let label: String
+    let live: Bool
+    let value: String
+    let unit: String
+    let spark: [Double]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Image(systemName: icon).font(.subheadline).foregroundStyle(color)
-                Spacer()
-                Text(title).font(.caption2).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(tint).frame(width: 28, height: 28)
+                    Image(systemName: icon)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(color)
+                }
+                Text(label)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(ColorPalette.inkSoft)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if live {
+                    Circle().fill(ColorPalette.cardioRed).frame(width: 6, height: 6)
+                }
             }
+
             HStack(alignment: .lastTextBaseline, spacing: 4) {
                 Text(value)
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .foregroundStyle(value == "--" ? Color.secondary : .primary)
+                    .font(.system(size: 24, weight: .heavy))
+                    .tracking(-0.6)
+                    .foregroundStyle(value == "--" ? ColorPalette.inkMute : ColorPalette.ink)
                     .contentTransition(.numericText())
                     .animation(.spring(duration: 0.4), value: value)
-                Text(unit).font(.caption).foregroundStyle(.secondary)
+                Text(unit)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(ColorPalette.inkSoft)
             }
-            Rectangle().fill(color.opacity(0.35)).frame(height: 2).clipShape(Capsule())
+
+            Sparkline(points: spark)
+                .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                .frame(height: 22)
+                .frame(maxWidth: .infinity)
         }
-        .padding(14)
-        .background(color.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(color.opacity(0.15), lineWidth: 1))
+        .padding(EdgeInsets(top: 14, leading: 14, bottom: 12, trailing: 14))
+        .frame(maxWidth: .infinity, minHeight: 116, alignment: .topLeading)
+        .designCard(cornerRadius: 18)
     }
 }
 
 // ============================================================================
-// MARK: - Heart Rate Sparkline
+// MARK: - Alerts Card
 // ============================================================================
 
-struct HRSparklineCard: View {
-    let history: [VitalSample]
-
-    private var latest: Double { history.last?.value ?? 0 }
-    private var minVal: Double { history.map(\.value).min() ?? 0 }
-    private var maxVal: Double { history.map(\.value).max() ?? 0 }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                SectionHeader(title: "Heart Rate History", systemImage: "chart.line.uptrend.xyaxis")
-                Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(String(format: "%.0f bpm", latest))
-                        .font(.system(.subheadline, design: .rounded, weight: .bold))
-                        .foregroundStyle(.red)
-                        .contentTransition(.numericText())
-                        .animation(.spring(duration: 0.4), value: latest)
-                    Text("\(history.count) readings")
-                        .font(.caption2).foregroundStyle(.secondary)
-                }
-            }
-
-            Chart(history) { s in
-                LineMark(x: .value("t", s.timestamp), y: .value("HR", s.value))
-                    .foregroundStyle(LinearGradient(colors: [.red.opacity(0.8), .red],
-                                                    startPoint: .leading, endPoint: .trailing))
-                    .interpolationMethod(.catmullRom)
-                AreaMark(x: .value("t", s.timestamp), y: .value("HR", s.value))
-                    .foregroundStyle(LinearGradient(colors: [.red.opacity(0.15), .clear],
-                                                    startPoint: .top, endPoint: .bottom))
-                    .interpolationMethod(.catmullRom)
-            }
-            .chartXAxis(.hidden)
-            .chartYAxis {
-                AxisMarks(position: .trailing, values: .stride(by: 20)) { val in
-                    AxisValueLabel {
-                        if let v = val.as(Double.self) {
-                            Text(String(format: "%.0f", v)).font(.caption2).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-            .chartYScale(domain: max(0, minVal - 10)...min(250, maxVal + 10))
-            .frame(height: 90)
-
-            HStack {
-                Label(String(format: "Min: %.0f", minVal), systemImage: "arrow.down")
-                    .font(.caption2).foregroundStyle(.secondary)
-                Spacer()
-                Label(String(format: "Max: %.0f", maxVal), systemImage: "arrow.up")
-                    .font(.caption2).foregroundStyle(.secondary)
-            }
-        }
-        .padding(14)
-        .cardSurface(cornerRadius: 16)
-    }
-}
-
-// ============================================================================
-// MARK: - Alert Feed Section
-// ============================================================================
-
-struct AlertFeedSection: View {
+struct AlertsCardSection: View {
     let alerts: [RPMAlert]
-    @State private var expanded = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                SectionHeader(title: "Active Alerts (\(alerts.count))", systemImage: "bell.badge.fill")
-                    .padding(.horizontal)
-                Spacer()
-                Button {
-                    withAnimation(.spring(duration: 0.3)) { expanded.toggle() }
-                } label: {
-                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                .padding(.trailing)
+            DSectionTitle(title: "Active alerts",
+                          accent: "\(alerts.count)",
+                          accentColor: ColorPalette.cardioRed) {
+                LinkLabel(text: "See all")
             }
-
-            if expanded {
-                VStack(spacing: 8) {
-                    ForEach(alerts.prefix(5)) { alert in AlertFeedRow(alert: alert) }
-                    if alerts.count > 5 {
-                        Text("+ \(alerts.count - 5) more")
-                            .font(.caption).foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                    }
+            VStack(spacing: 0) {
+                let shown = Array(alerts.prefix(4))
+                ForEach(Array(shown.enumerated()), id: \.element.id) { idx, alert in
+                    AlertDesignRow(alert: alert, isLast: idx == shown.count - 1)
                 }
-                .padding(.horizontal)
             }
+            .padding(.horizontal, 18)
+            .designCard(cornerRadius: 20)
         }
     }
 }
 
-struct AlertFeedRow: View {
+struct AlertDesignRow: View {
     let alert: RPMAlert
+    let isLast: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ZStack {
-                Circle().fill(alert.alertLevel.bgColor).frame(width: 36, height: 36)
-                Image(systemName: alert.alertLevel.systemImageName)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(alert.alertLevel.accentColor)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(alert.alertLevel.displayName.uppercased())
-                        .font(.system(size: 10, weight: .bold))
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(alert.alertLevel.accentColor.opacity(0.14))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: alert.alertLevel.systemImageName)
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(alert.alertLevel.accentColor)
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(alert.alertLevel.bgColor, in: Capsule())
-                    Spacer()
-                    Text(relativeTime(alert.timestamp)).font(.caption2).foregroundStyle(.tertiary)
                 }
-                Text(alert.description).font(.subheadline).fontWeight(.medium).lineLimit(2)
-                Text("Patient: \(alert.patientID)").font(.caption).foregroundStyle(.secondary)
-                if !alert.requiredActions.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 4) {
-                            ForEach(alert.requiredActions.prefix(3), id: \.self) { action in
-                                Text(action.replacingOccurrences(of: "_", with: " ").capitalized)
-                                    .font(.system(size: 10, weight: .medium))
-                                    .padding(.horizontal, 7).padding(.vertical, 3)
-                                    .background(Color.secondary.opacity(0.1), in: Capsule())
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(alert.description)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(ColorPalette.ink)
+                        .lineLimit(1)
+                    Text("\(relativeTime(alert.timestamp)) · Patient \(alert.patientID)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(ColorPalette.inkSoft)
+                        .lineLimit(1)
                 }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(ColorPalette.inkMute)
+            }
+            .padding(.vertical, 12)
+            if !isLast {
+                Rectangle().fill(ColorPalette.line).frame(height: 1)
             }
         }
-        .padding(12)
-        .background(alert.alertLevel.bgColor.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12)
-            .stroke(alert.alertLevel.accentColor.opacity(0.2), lineWidth: 1))
     }
 
     private func relativeTime(_ iso: String) -> String {
@@ -561,94 +719,131 @@ struct AlertFeedRow: View {
 }
 
 // ============================================================================
-// MARK: - Bridge Stats Section
+// MARK: - System Status
 // ============================================================================
 
-struct BridgeStatsSection: View {
+struct SystemStatusSection: View {
     let status: BridgeStatus
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(title: "System Status", systemImage: "server.rack").padding(.horizontal)
-            HStack(spacing: 12) {
-                StatTile(label: "Agents",   value: "\(status.agentCount)",     color: .green)
-                StatTile(label: "Queue",    value: "\(status.queueDepth)",     color: queueColor)
-                StatTile(label: "Messages", value: fmtLarge(status.messageBusTotal), color: .blue)
-                StatTile(label: "Devices",  value: "\(status.devices.active)/\(status.devices.total)", color: .purple)
+            DSectionTitle("System status")
+            HStack(spacing: 10) {
+                DStatTile(label: "Agents",   value: "\(status.agentCount)", color: ColorPalette.cardioGreen)
+                DStatTile(label: "Queue",    value: "\(status.queueDepth)", color: queueColor)
+                DStatTile(label: "Messages", value: fmtLarge(status.messageBusTotal), color: ColorPalette.brandBlue)
+                DStatTile(label: "Devices",  value: "\(status.devices.active)/\(status.devices.total)", color: ColorPalette.cardioPurple)
             }
-            .padding(.horizontal)
         }
     }
 
     private var queueColor: Color {
-        status.queueDepth > 1500 ? .red : status.queueDepth > 500 ? .orange : .green
+        status.queueDepth > 1500 ? ColorPalette.cardioRed
+        : status.queueDepth > 500 ? ColorPalette.cardioAmber
+        : ColorPalette.cardioGreen
     }
     private func fmtLarge(_ n: Int) -> String {
         n >= 1000 ? String(format: "%.1fk", Double(n)/1000) : "\(n)"
     }
 }
 
-struct StatTile: View {
+struct DStatTile: View {
     let label: String; let value: String; let color: Color
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 5) {
             Text(value)
-                .font(.system(.title3, design: .rounded, weight: .bold))
+                .font(.system(size: 19, weight: .heavy))
+                .tracking(-0.4)
                 .foregroundStyle(color)
                 .contentTransition(.numericText())
                 .animation(.spring(duration: 0.4), value: value)
-            Text(label).font(.caption2).foregroundStyle(.secondary)
+                .lineLimit(1).minimumScaleFactor(0.6)
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(ColorPalette.inkSoft)
         }
-        .frame(maxWidth: .infinity).padding(.vertical, 12)
-        .background(color.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(color.opacity(0.15), lineWidth: 1))
+        .frame(maxWidth: .infinity).padding(.vertical, 14)
+        .designCard(cornerRadius: 14)
     }
 }
 
 // ============================================================================
-// MARK: - Recent Reports Section
+// MARK: - Recent Reports
 // ============================================================================
 
-struct RecentReportsSection: View {
+struct ReportsCardSection: View {
     let reports: [ClinicalReport]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(title: "Recent Reports", systemImage: "doc.text.fill").padding(.horizontal)
-            VStack(spacing: 6) {
-                ForEach(reports) { report in ReportRow(report: report) }
+            DSectionTitle("Recent reports")
+            VStack(spacing: 0) {
+                ForEach(Array(reports.enumerated()), id: \.element.id) { idx, report in
+                    ReportDesignRow(report: report, isLast: idx == reports.count - 1)
+                }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 18)
+            .designCard(cornerRadius: 20)
         }
     }
 }
 
-struct ReportRow: View {
+struct ReportDesignRow: View {
     let report: ClinicalReport
+    let isLast: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 4)
-                .fill(report.level.accentColor).frame(width: 3, height: 40)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(report.summary).font(.caption).lineLimit(2)
-                Text("Patient \(report.patientID) · \(fmtTime(report.generatedAt))")
-                    .font(.caption2).foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(report.level.accentColor)
+                    .frame(width: 4, height: 38)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(report.summary)
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .foregroundStyle(ColorPalette.ink)
+                        .lineLimit(2)
+                    Text("Patient \(report.patientID) · \(fmtTime(report.generatedAt))")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(ColorPalette.inkSoft)
+                }
+                Spacer(minLength: 6)
+                Text(report.level.displayName)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(report.level.accentColor)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(report.level.accentColor.opacity(0.12), in: Capsule())
             }
-            Spacer()
-            Text(report.level.displayName)
-                .font(.system(size: 9, weight: .bold)).foregroundStyle(report.level.accentColor)
-                .padding(.horizontal, 6).padding(.vertical, 3)
-                .background(report.level.bgColor, in: Capsule())
+            .padding(.vertical, 12)
+            if !isLast {
+                Rectangle().fill(ColorPalette.line).frame(height: 1)
+            }
         }
-        .padding(10)
-        .cardSurface(cornerRadius: 10)
     }
 
     private func fmtTime(_ iso: String) -> String {
         guard let d = ISO8601DateFormatter().date(from: iso) else { return iso }
         let f = DateFormatter(); f.dateFormat = "HH:mm"
         return f.string(from: d)
+    }
+}
+
+// ============================================================================
+// MARK: - Error Banner
+// ============================================================================
+
+struct ErrorBanner: View {
+    let message: String
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(ColorPalette.cardioAmber).font(.caption)
+            Text("Could not refresh: \(message)")
+                .font(.system(size: 12)).foregroundStyle(ColorPalette.inkSoft).lineLimit(2)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ColorPalette.amberSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
@@ -670,28 +865,28 @@ struct DeviceSyncStatusCard: View {
             Image(systemName: pairingService.isStreaming
                   ? "sensor.tag.radiowaves.forward.fill" : "sensor.tag.radiowaves.forward")
                 .font(.title2)
-                .foregroundStyle(pairingService.isStreaming ? .green : .secondary)
+                .foregroundStyle(pairingService.isStreaming ? ColorPalette.cardioGreen : ColorPalette.inkMute)
             VStack(alignment: .leading, spacing: 3) {
                 Text(pairingService.isStreaming ? "Device Syncing" : "No Device Connected")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(pairingService.isStreaming ? .primary : .secondary)
+                    .foregroundStyle(pairingService.isStreaming ? ColorPalette.ink : ColorPalette.inkSoft)
                 Text(pairingService.isStreaming
                      ? "\(pairingService.framesSynced) frames sent to IoMT backend"
                      : "Go to Connect tab to pair your device")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(ColorPalette.inkSoft)
             }
             Spacer()
             if pairingService.isStreaming {
-                Text("LIVE").font(.system(size: 9, weight: .bold)).foregroundStyle(.green)
+                Text("LIVE").font(.system(size: 9, weight: .bold)).foregroundStyle(ColorPalette.cardioGreen)
                     .padding(.horizontal, 6).padding(.vertical, 3)
-                    .background(Color.green.opacity(0.15), in: Capsule())
-                    .overlay(Capsule().stroke(Color.green.opacity(0.4), lineWidth: 1))
+                    .background(ColorPalette.cardioGreen.opacity(0.15), in: Capsule())
+                    .overlay(Capsule().stroke(ColorPalette.cardioGreen.opacity(0.4), lineWidth: 1))
             }
         }
         .padding()
-        .cardSurface(cornerRadius: 14)
-        .overlay(RoundedRectangle(cornerRadius: 14)
-            .stroke(pairingService.isStreaming ? Color.green.opacity(0.25) : Color.clear, lineWidth: 1))
+        .designCard(cornerRadius: 14)
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .stroke(pairingService.isStreaming ? ColorPalette.cardioGreen.opacity(0.25) : Color.clear, lineWidth: 1))
     }
 }
 
@@ -699,48 +894,10 @@ struct ConnectionBanner: View {
     let label: String; let isConnected: Bool
     var body: some View {
         HStack(spacing: 8) {
-            Circle().fill(isConnected ? Color.green : Color.red).frame(width: 8, height: 8)
-            Text(label).font(.caption).foregroundStyle(.secondary)
+            Circle().fill(isConnected ? ColorPalette.cardioGreen : ColorPalette.cardioRed).frame(width: 8, height: 8)
+            Text(label).font(.caption).foregroundStyle(ColorPalette.inkSoft)
             Spacer()
         }
-    }
-}
-
-struct BridgeStatusCard: View {
-    let status: BridgeStatus
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Bridge Status", systemImage: "server.rack").font(.headline)
-            Divider()
-            HStack {
-                StatusRow(label: "Agents",      value: "\(status.agentCount)")
-                Spacer()
-                StatusRow(label: "Queue Depth", value: "\(status.queueDepth)")
-                Spacer()
-                StatusRow(label: "Messages",    value: "\(status.messageBusTotal)")
-            }
-        }
-        .padding()
-        .cardSurface(cornerRadius: 16)
-    }
-}
-
-struct DeviceSummaryCard: View {
-    let summary: DeviceSummary
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Devices", systemImage: "sensor.tag.radiowaves.forward.fill").font(.headline)
-            Divider()
-            HStack {
-                StatusRow(label: "Total",    value: "\(summary.total)")
-                Spacer()
-                StatusRow(label: "Active",   value: "\(summary.active)")
-                Spacer()
-                StatusRow(label: "Inactive", value: "\(summary.inactive)")
-            }
-        }
-        .padding()
-        .cardSurface(cornerRadius: 16)
     }
 }
 
@@ -748,9 +905,17 @@ struct StatusRow: View {
     let label: String; let value: String
     var body: some View {
         VStack(spacing: 2) {
-            Text(value).font(.system(.title3, design: .rounded, weight: .semibold))
+            Text(value).font(.system(size: 20, weight: .bold))
+                .foregroundStyle(ColorPalette.ink)
                 .contentTransition(.numericText())
-            Text(label).font(.caption2).foregroundStyle(.secondary)
+            Text(label).font(.caption2).foregroundStyle(ColorPalette.inkSoft)
         }
     }
+}
+
+#Preview {
+    DashboardView()
+        .environmentObject(AuthService(keychainService: KeychainService(), apiClient: APIClient(keychainService: KeychainService())))
+        .environmentObject(DevicePairingService(keychainService: KeychainService(), bridgeClient: BridgeClient(keychainService: KeychainService()), apiClient: APIClient(keychainService: KeychainService()), healthKitService: HealthKitService(), fitbitService: FitbitService(keychainService: KeychainService())))
+        .environmentObject(SessionManager(bridgeClient: BridgeClient(keychainService: KeychainService()), keychainService: KeychainService(), authService: AuthService(keychainService: KeychainService(), apiClient: APIClient(keychainService: KeychainService()))))
 }

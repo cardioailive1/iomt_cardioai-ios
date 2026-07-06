@@ -28,12 +28,12 @@
 		AA000018 /* Health/HealthKitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100018 /* Health/HealthKitService.swift */; };
 		AA000019 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100019 /* AuthService.swift */; };
 		AA000020 /* Health/DevicePairingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100020 /* Health/DevicePairingService.swift */; };
-		AA000041 /* Health/FitbitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100041 /* Health/FitbitService.swift */; };
-		AA000042 /* Health/KnownBLEDevices.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100042 /* Health/KnownBLEDevices.swift */; };
 		AA000021 /* Auth/SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100021 /* Auth/SignInView.swift */; };
 		AA000022 /* DevicePairing/DevicePairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100022 /* DevicePairing/DevicePairingView.swift */; };
 		AA000030 /* CardioAITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100030 /* CardioAITests.swift */; };
 		AA000040 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100040 /* Theme.swift */; };
+		AA000041 /* Health/FitbitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100041 /* Health/FitbitService.swift */; };
+		AA000042 /* Health/KnownBLEDevices.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100042 /* Health/KnownBLEDevices.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -68,12 +68,12 @@
 		AA100018 /* Health/HealthKitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/HealthKitService.swift; sourceTree = "<group>"; };
 		AA100019 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		AA100020 /* Health/DevicePairingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/DevicePairingService.swift; sourceTree = "<group>"; };
-		AA100041 /* Health/FitbitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/FitbitService.swift; sourceTree = "<group>"; };
-		AA100042 /* Health/KnownBLEDevices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/KnownBLEDevices.swift; sourceTree = "<group>"; };
 		AA100021 /* Auth/SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth/SignInView.swift; sourceTree = "<group>"; };
 		AA100022 /* DevicePairing/DevicePairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePairing/DevicePairingView.swift; sourceTree = "<group>"; };
 		AA100030 /* CardioAITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardioAITests.swift; sourceTree = "<group>"; };
 		AA100040 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		AA100041 /* Health/FitbitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/FitbitService.swift; sourceTree = "<group>"; };
+		AA100042 /* Health/KnownBLEDevices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/KnownBLEDevices.swift; sourceTree = "<group>"; };
 		AA100098 /* CardioAI.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CardioAI.entitlements; sourceTree = "<group>"; };
 		AA100099 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA200001 /* CardioAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CardioAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -376,7 +376,7 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_ENTITLEMENTS = CardioAI/CardioAI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = W9464NC4J7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -407,7 +407,7 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_ENTITLEMENTS = CardioAI/CardioAI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = W9464NC4J7;
 				ENABLE_PREVIEWS = NO;
 				GENERATE_INFOPLIST_FILE = NO;

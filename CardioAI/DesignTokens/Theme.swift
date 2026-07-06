@@ -65,6 +65,12 @@ enum ColorPalette {
     static let statusModerate = Color(red: 0.984, green: 0.749, blue: 0.141)
     static let liveGreen      = Color(red: 0.204, green: 0.831, blue: 0.600)
 
+    // Vital tints (soft icon backgrounds, from Onboarding mockup)
+    static let glucose      = Color(red: 0.961, green: 0.620, blue: 0.043) // #F59E0B
+    static let glucoseSoft  = Color(red: 1.0,   green: 0.945, blue: 0.855) // #FFF1DA
+    static let oxygenCyan   = Color(red: 0.024, green: 0.714, blue: 0.831) // #06B6D4
+    static let oxygenSoft   = Color(red: 0.839, green: 0.957, blue: 0.980) // #D6F4FA
+
     // Divider
     static let line = Color(red: 0.933, green: 0.945, blue: 0.965)
 
@@ -171,6 +177,17 @@ extension View {
     /// Convenience: pad + white card surface (cardioai-ios `cardStyle`).
     func cardStyle(padding: CGFloat = Spacing.lg, cornerRadius: CGFloat = Radius.lg) -> some View {
         self.padding(padding).cardSurface(cornerRadius: cornerRadius)
+    }
+
+    /// Design-accurate card surface matching the CardioAI Onboarding mockup:
+    /// white fill, 20-pt radius, layered ink-tinted shadow
+    /// (`0 1px 2px / 0 8px 24px rgba(11,18,32,.04–.05)`).
+    func designCard(cornerRadius: CGFloat = 20) -> some View {
+        self
+            .background(ColorPalette.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .shadow(color: ColorPalette.ink.opacity(0.05), radius: 14, x: 0, y: 8)
+            .shadow(color: ColorPalette.ink.opacity(0.04), radius: 2,  x: 0, y: 1)
     }
 
     /// Light app screen background (#F4F6FB) behind a scroll/stack.
