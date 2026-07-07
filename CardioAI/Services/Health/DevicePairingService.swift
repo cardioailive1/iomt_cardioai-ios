@@ -117,7 +117,10 @@ final class DevicePairingService: NSObject, ObservableObject {
         pairedDeviceID   = try? keychainService.read(.deviceID)
         pairedDeviceName = pairedDeviceID.map { "Device \($0.prefix(8))" }
 
+        // A stored device ID alone is not proof of connection — Health access
+        // may have been revoked (or the key survived a reinstall). Require both.
         appleWatchConnected = keychainService.exists(.appleWatchDeviceID)
+                              && healthKitService.isHeartRateReadAuthorized
         fitbitConnected     = keychainService.exists(.fitbitAccessToken)
     }
 
@@ -248,6 +251,10 @@ final class DevicePairingService: NSObject, ObservableObject {
 
     func disconnectAppleWatch() {
         healthKitService.stopObservingHeartRate()
+        // Must clear the persisted ID — otherwise `exists(.appleWatchDeviceID)`
+        // in init() restores `appleWatchConnected = true` on next launch,
+        // showing "Connected" with no watch. (Keychain survives reinstalls too.)
+        try? keychainService.delete(.appleWatchDeviceID)
         appleWatchConnected = false
     }
 

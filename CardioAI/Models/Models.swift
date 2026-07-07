@@ -72,9 +72,11 @@ struct RPMAlert: Identifiable, Codable {
 
     var isCritical: Bool { alertLevel == .critical }
 
+    // Keys post-`.convertFromSnakeCase`: snake_case JSON is already camelCased
+    // by the decoder, so rawValues here must be the CONVERTED form.
     enum CodingKeys: String, CodingKey {
-        case id              = "alert_id"
-        case patientID       = "patient_id"
+        case id              = "alertId"
+        case patientID       = "patientId"
         case alertLevel      = "level"
         case description
         case requiredActions = "actions"
@@ -92,12 +94,14 @@ struct DeviceInfo: Identifiable, Codable {
     let dataCount:   Int
     let lastDataAt:  String?
 
+    // rawValues in CONVERTED (camelCase) form — decoder applies
+    // `.convertFromSnakeCase` before matching keys.
     enum CodingKeys: String, CodingKey {
-        case id         = "device_id"
-        case patientID  = "patient_id"
-        case isActive   = "is_active"
-        case dataCount  = "data_count"
-        case lastDataAt = "last_data_at"
+        case id         = "deviceId"
+        case patientID  = "patientId"
+        case isActive
+        case dataCount
+        case lastDataAt
     }
 }
 
@@ -113,21 +117,14 @@ struct DeviceSummary: Codable {
 // MARK: - Bridge Status (from /health)
 
 struct BridgeStatus: Codable {
-    let bridgeID:        String
+    let bridgeId:        String
     let timestamp:       String
     let queueDepth:      Int
     let agentCount:      Int
     let messageBusTotal: Int
     let devices:         DeviceSummary
-
-    enum CodingKeys: String, CodingKey {
-        case bridgeID        = "bridge_id"
-        case timestamp
-        case queueDepth      = "queue_depth"
-        case agentCount      = "agent_count"
-        case messageBusTotal = "message_bus_total"
-        case devices
-    }
+    // Keys resolved by decoder's `.convertFromSnakeCase` strategy.
+    // Do NOT add snake_case CodingKeys — that double-maps and breaks decode.
 }
 
 // MARK: - Clinical Report
@@ -143,14 +140,16 @@ struct ClinicalReport: Identifiable, Codable {
     let generatedAt: String
 
     enum CodingKeys: String, CodingKey {
-        case id          = "report_id"
-        case alertID     = "alert_id"
-        case patientID   = "patient_id"
+        // rawValues in CONVERTED (camelCase) form — see decoder strategy.
+        case id          = "reportId"
+        case alertID     = "alertId"
+        case patientID   = "patientId"
         case level
         case summary
         case actions
         case notified
-        case generatedAt = "generated_at"
+        case generatedAt
+
     }
 }
 
