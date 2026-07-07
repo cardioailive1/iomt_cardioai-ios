@@ -21,6 +21,7 @@
 		AA000011 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100011 /* RootView.swift */; };
 		AA000012 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100012 /* MainTabView.swift */; };
 		AA000013 /* Dashboard/DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100013 /* Dashboard/DashboardView.swift */; };
+		AA000031 /* Vitals/VitalsDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100031 /* Vitals/VitalsDetailView.swift */; };
 		AA000014 /* Alerts/AlertsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100014 /* Alerts/AlertsView.swift */; };
 		AA000015 /* Devices/DevicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100015 /* Devices/DevicesView.swift */; };
 		AA000016 /* Settings/SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100016 /* Settings/SettingsView.swift */; };
@@ -61,6 +62,7 @@
 		AA100011 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		AA100012 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		AA100013 /* Dashboard/DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dashboard/DashboardView.swift; sourceTree = "<group>"; };
+		AA100031 /* Vitals/VitalsDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Vitals/VitalsDetailView.swift; sourceTree = "<group>"; };
 		AA100014 /* Alerts/AlertsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Alerts/AlertsView.swift; sourceTree = "<group>"; };
 		AA100015 /* Devices/DevicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Devices/DevicesView.swift; sourceTree = "<group>"; };
 		AA100016 /* Settings/SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings/SettingsView.swift; sourceTree = "<group>"; };
@@ -174,6 +176,7 @@
 				AA100016 /* Settings/SettingsView.swift */,
 				AA100021 /* Auth/SignInView.swift */,
 				AA100022 /* DevicePairing/DevicePairingView.swift */,
+				AA100031 /* Vitals/VitalsDetailView.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -327,6 +330,7 @@
 				AA000011 /* RootView.swift in Sources */,
 				AA000012 /* MainTabView.swift in Sources */,
 				AA000013 /* Dashboard/DashboardView.swift in Sources */,
+				AA000031 /* Vitals/VitalsDetailView.swift in Sources */,
 				AA000014 /* Alerts/AlertsView.swift in Sources */,
 				AA000015 /* Devices/DevicesView.swift in Sources */,
 				AA000016 /* Settings/SettingsView.swift in Sources */,
@@ -376,7 +380,7 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_ENTITLEMENTS = CardioAI/CardioAI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = W9464NC4J7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -407,7 +411,7 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_ENTITLEMENTS = CardioAI/CardioAI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = W9464NC4J7;
 				ENABLE_PREVIEWS = NO;
 				GENERATE_INFOPLIST_FILE = NO;

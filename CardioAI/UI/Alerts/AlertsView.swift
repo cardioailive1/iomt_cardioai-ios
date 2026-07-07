@@ -13,33 +13,51 @@ struct AlertsView: View {
                     ProgressView("Loading alerts...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if alertStore.alerts.isEmpty {
-                    ContentUnavailableView(
-                        "No Active Alerts",
-                        systemImage: "checkmark.shield.fill",
-                        description: Text("All monitored patients are within normal parameters.")
-                    )
+                    ScrollView {
+                        VStack(spacing: 20) {
+                            DScreenHeader(title: "Alerts", subtitle: "Notifications")
+                            DEmptyState(
+                                icon: "checkmark.shield.fill",
+                                tint: ColorPalette.greenSoft, color: ColorPalette.cardioGreen,
+                                title: "No Active Alerts",
+                                message: "All monitored patients are within normal parameters."
+                            )
+                        }
+                        .padding(16)
+                    }
+                    .background(ColorPalette.screenBackground.ignoresSafeArea())
                 } else {
-                    List {
-                        ForEach(AlertLevel.allCases, id: \.self) { level in
-                            let levelAlerts = alertStore.alerts.filter { $0.alertLevel == level }
-                            if !levelAlerts.isEmpty {
-                                Section(level.displayName) {
-                                    ForEach(levelAlerts) { alert in
-                                        NavigationLink(destination: AlertDetailView(alert: alert)) {
-                                            AlertRow(alert: alert)
+                    ScrollView {
+                        VStack(spacing: 20) {
+                            DScreenHeader(title: "Alerts", subtitle: "Notifications")
+                            ForEach(AlertLevel.allCases, id: \.self) { level in
+                                let levelAlerts = alertStore.alerts.filter { $0.alertLevel == level }
+                                if !levelAlerts.isEmpty {
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        DSectionTitle(level.displayName,
+                                                      accent: "\(levelAlerts.count)",
+                                                      accentColor: level.accentColor)
+                                        VStack(spacing: 0) {
+                                            ForEach(Array(levelAlerts.enumerated()), id: \.element.id) { idx, alert in
+                                                NavigationLink(destination: AlertDetailView(alert: alert)) {
+                                                    AlertDesignRow(alert: alert, isLast: idx == levelAlerts.count - 1)
+                                                }
+                                                .buttonStyle(.plain)
+                                            }
                                         }
+                                        .padding(.horizontal, 18)
+                                        .designCard(cornerRadius: 20)
                                     }
                                 }
                             }
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
                     }
-                    .listStyle(.insetGrouped)
-                    .scrollContentBackground(.hidden)
-                    .background(ColorPalette.screenBackground)
+                    .background(ColorPalette.screenBackground.ignoresSafeArea())
                 }
             }
-            .navigationTitle("Alerts")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if alertStore.isLoading {
@@ -49,43 +67,13 @@ struct AlertsView: View {
                             Task { await alertStore.refresh() }
                         } label: {
                             Image(systemName: "arrow.clockwise")
+                                .foregroundStyle(ColorPalette.ink)
                         }
                     }
                 }
             }
             .refreshable { await alertStore.refresh() }
         }
-    }
-}
-
-// MARK: - Alert Row
-
-struct AlertRow: View {
-    let alert: RPMAlert
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: alert.alertLevel.systemImageName)
-                .font(.title2)
-                .foregroundStyle(Color(hex: alert.alertLevel.colorHex))
-                .frame(width: 36)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(alert.description)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .lineLimit(2)
-
-                HStack(spacing: 4) {
-                    Text("Patient: \(alert.patientID)")
-                    Text("·")
-                    Text(alert.timestamp.prefix(10))
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 4)
     }
 }
 
@@ -99,22 +87,25 @@ struct AlertDetailView: View {
             VStack(alignment: .leading, spacing: 20) {
 
                 // Header
-                HStack {
-                    Image(systemName: alert.alertLevel.systemImageName)
-                        .font(.largeTitle)
-                        .foregroundStyle(Color(hex: alert.alertLevel.colorHex))
-                    VStack(alignment: .leading) {
+                HStack(spacing: 14) {
+                    DIconTile(icon: alert.alertLevel.systemImageName,
+                              tint: alert.alertLevel.accentColor.opacity(0.14),
+                              color: alert.alertLevel.accentColor,
+                              size: 52, corner: 14, iconSize: 22)
+                    VStack(alignment: .leading, spacing: 3) {
                         Text(alert.alertLevel.displayName)
-                            .font(.headline)
-                            .foregroundStyle(Color(hex: alert.alertLevel.colorHex))
-                        Text("Patient: \(alert.patientID)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 18, weight: .heavy))
+                            .tracking(-0.4)
+                            .foregroundStyle(alert.alertLevel.accentColor)
+                        Text("Patient \(alert.patientID)")
+                            .font(.system(size: 13))
+                            .foregroundStyle(ColorPalette.inkSoft)
                     }
+                    Spacer()
                 }
-                .padding()
+                .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .cardSurface()
+                .designCard(cornerRadius: 20)
 
                 // Description
                 InfoSection(title: "Diagnosis") {
@@ -163,18 +154,19 @@ struct InfoSection<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(ColorPalette.inkSoft)
                 .textCase(.uppercase)
-                .tracking(0.5)
+                .tracking(0.8)
             content()
+                .font(.system(size: 14))
+                .foregroundStyle(ColorPalette.ink)
         }
-        .padding()
+        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .cardSurface()
+        .designCard(cornerRadius: 20)
     }
 }
 

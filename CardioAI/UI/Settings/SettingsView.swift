@@ -1,4 +1,4 @@
-// SettingsView.swift — updated with Sign Out and Apple account info.
+// SettingsView.swift — dashboard design language (custom cards, no native Form).
 
 import SwiftUI
 
@@ -14,84 +14,104 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            ScrollView {
+                VStack(spacing: 20) {
 
-                // ── Account ────────────────────────────────────────────────
-                if let user = authService.currentUser {
-                    Section("Account") {
-                        LabeledContent("Name",       value: user.displayName)
-                        LabeledContent("Email",      value: user.email)
-                        LabeledContent("Role",       value: user.role.capitalized)
-                        if let pid = user.patientID {
-                            LabeledContent("Patient ID", value: pid)
-                        }
-                        LabeledContent("Signed in with", value: "Apple ID")
-                    }
-                }
+                    DScreenHeader(title: "Settings", subtitle: "Account")
 
-                // ── Device ─────────────────────────────────────────────────
-                Section("Device") {
-                    if pairingService.isStreaming {
-                        LabeledContent("Status", value: "Streaming")
-                        if let name = pairingService.pairedDeviceName {
-                            LabeledContent("Device", value: name)
-                        }
-                        LabeledContent("Frames synced",
-                                       value: "\(pairingService.framesSynced)")
-                        Button("Disconnect Device") {
-                            showDisconnectConfirm = true
-                        }
-                        .foregroundStyle(.red)
-                    } else {
-                        Label("No device connected", systemImage: "sensor.tag.radiowaves.forward")
-                            .foregroundStyle(.secondary)
-                        NavigationLink("Connect a Device") {
-                            DevicePairingView()
+                    // ── Account ────────────────────────────────────────────
+                    if let user = authService.currentUser {
+                        SettingsGroup(title: "Account") {
+                            SettingsRow(label: "Name",  value: user.displayName)
+                            SettingsDivider()
+                            SettingsRow(label: "Email", value: user.email)
+                            SettingsDivider()
+                            SettingsRow(label: "Role",  value: user.role.capitalized)
+                            if let pid = user.patientID {
+                                SettingsDivider()
+                                SettingsRow(label: "Patient ID", value: pid)
+                            }
+                            SettingsDivider()
+                            SettingsRow(label: "Signed in with", value: "Apple ID")
                         }
                     }
-                }
 
-                // ── Connection ─────────────────────────────────────────────
-                Section("Backend Connection") {
-                    LabeledContent("Status",      value: sessionManager.connectionLabel)
-                    LabeledContent("Backend",     value: cfg.backendWSURL.host ?? "—")
-                    LabeledContent("Environment", value: cfg.environment.rawValue.capitalized)
-                    Button(sessionManager.isConnected ? "Disconnect" : "Reconnect") {
-                        if sessionManager.isConnected {
-                            sessionManager.disconnect()
+                    // ── Device ─────────────────────────────────────────────
+                    SettingsGroup(title: "Device") {
+                        if pairingService.isStreaming {
+                            SettingsRow(label: "Status", value: "Streaming", valueColor: ColorPalette.cardioGreen)
+                            if let name = pairingService.pairedDeviceName {
+                                SettingsDivider()
+                                SettingsRow(label: "Device", value: name)
+                            }
+                            SettingsDivider()
+                            SettingsRow(label: "Frames synced", value: "\(pairingService.framesSynced)")
+                            SettingsDivider()
+                            SettingsButtonRow(title: "Disconnect Device", role: .destructive) {
+                                showDisconnectConfirm = true
+                            }
                         } else {
-                            sessionManager.connect()
+                            SettingsRow(label: "Status", value: "No device connected", valueColor: ColorPalette.inkMute)
+                            SettingsDivider()
+                            SettingsLinkRow(title: "Connect a Device") { DevicePairingView() }
                         }
                     }
-                    .foregroundStyle(sessionManager.isConnected ? .red : .green)
-                }
 
-                // ── Security ───────────────────────────────────────────────
-                Section("Security") {
-                    LabeledContent("Auth method", value: "Sign in with Apple")
-                    LabeledContent("WS auth",     value: "HMAC-SHA256 + JWT")
-                    NavigationLink("Manage Credentials") {
-                        CredentialsView()
+                    // ── Backend Connection ─────────────────────────────────
+                    SettingsGroup(title: "Backend connection") {
+                        SettingsRow(label: "Status",
+                                    value: sessionManager.connectionLabel,
+                                    valueColor: sessionManager.isConnected ? ColorPalette.cardioGreen : ColorPalette.cardioAmber)
+                        SettingsDivider()
+                        SettingsRow(label: "Backend", value: cfg.backendWSURL.host ?? "—")
+                        SettingsDivider()
+                        SettingsRow(label: "Environment", value: cfg.environment.rawValue.capitalized)
+                        SettingsDivider()
+                        SettingsButtonRow(
+                            title: sessionManager.isConnected ? "Disconnect" : "Reconnect",
+                            tint: sessionManager.isConnected ? ColorPalette.cardioRed : ColorPalette.cardioGreen
+                        ) {
+                            if sessionManager.isConnected { sessionManager.disconnect() }
+                            else { sessionManager.connect() }
+                        }
                     }
-                }
 
-                // ── About ──────────────────────────────────────────────────
-                Section("About") {
-                    LabeledContent("Version",   value: cfg.appVersion)
-                    LabeledContent("Build",     value: cfg.buildNumber)
-                    LabeledContent("Client ID", value: cfg.clientID)
-                }
+                    // ── Security ───────────────────────────────────────────
+                    SettingsGroup(title: "Security") {
+                        SettingsRow(label: "Auth method", value: "Sign in with Apple")
+                        SettingsDivider()
+                        SettingsRow(label: "WS auth", value: "HMAC-SHA256 + JWT")
+                        SettingsDivider()
+                        SettingsLinkRow(title: "Manage Credentials") { CredentialsView() }
+                    }
 
-                // ── Sign Out ───────────────────────────────────────────────
-                Section {
-                    Button("Sign Out", role: .destructive) {
+                    // ── About ──────────────────────────────────────────────
+                    SettingsGroup(title: "About") {
+                        SettingsRow(label: "Version",   value: cfg.appVersion)
+                        SettingsDivider()
+                        SettingsRow(label: "Build",     value: cfg.buildNumber)
+                        SettingsDivider()
+                        SettingsRow(label: "Client ID", value: cfg.clientID)
+                    }
+
+                    // ── Sign Out ───────────────────────────────────────────
+                    Button {
                         showSignOutConfirm = true
+                    } label: {
+                        Text("Sign Out")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(ColorPalette.cardioRed)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .designCard(cornerRadius: 20)
                     }
+                    .buttonStyle(.plain)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
             }
-            .scrollContentBackground(.hidden)
             .background(ColorPalette.screenBackground.ignoresSafeArea())
-            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
             .confirmationDialog(
                 "Sign out of CardioAI?",
                 isPresented: $showSignOutConfirm,
@@ -121,6 +141,86 @@ struct SettingsView: View {
     }
 }
 
+// MARK: - Settings design-language building blocks
+
+struct SettingsGroup<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: () -> Content
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            DSectionTitle(title)
+            VStack(spacing: 0) { content() }
+                .padding(.horizontal, 18)
+                .designCard(cornerRadius: 20)
+        }
+    }
+}
+
+struct SettingsRow: View {
+    let label: String
+    let value: String
+    var valueColor: Color = ColorPalette.ink
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(label)
+                .font(.system(size: 14))
+                .foregroundStyle(ColorPalette.inkSoft)
+            Spacer(minLength: 12)
+            Text(value)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(valueColor)
+                .multilineTextAlignment(.trailing)
+                .lineLimit(2)
+        }
+        .padding(.vertical, 13)
+    }
+}
+
+struct SettingsDivider: View {
+    var body: some View { Rectangle().fill(ColorPalette.line).frame(height: 1) }
+}
+
+struct SettingsButtonRow: View {
+    let title: String
+    var role: ButtonRole? = nil
+    var tint: Color = ColorPalette.cardioRed
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(role == .destructive ? ColorPalette.cardioRed : tint)
+                Spacer()
+            }
+            .padding(.vertical, 13)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct SettingsLinkRow<Destination: View>: View {
+    let title: String
+    @ViewBuilder let destination: () -> Destination
+    var body: some View {
+        NavigationLink(destination: destination()) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(ColorPalette.brandBlue)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(ColorPalette.inkMute)
+            }
+            .padding(.vertical, 13)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 // MARK: - Credentials View (HMAC secret management)
 
 struct CredentialsView: View {
@@ -133,35 +233,71 @@ struct CredentialsView: View {
     private let keychainService = KeychainService()
 
     var body: some View {
-        Form {
-            Section {
-                Text("The HMAC shared secret is provided by your hospital IT department. It authenticates this device to the IoMT backend over WebSocket.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                Text("This is only needed if your hospital has issued this device for real-time hardware/BLE gateway streaming. Everything else in the app — Dashboard, Alerts, Devices — works normally without it.")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-            Section("HMAC Shared Secret") {
-                SecureField("Enter shared secret (min 32 chars)", text: $secretInput)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-            }
-            Section {
-                Button("Save to Keychain") { saveSecret() }
-                    .disabled(secretInput.count < 32)
-            }
-            if !statusMessage.isEmpty {
-                Section {
-                    Label(statusMessage,
-                          systemImage: isSuccess ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .foregroundStyle(isSuccess ? .green : .red)
-                        .font(.caption)
+        ScrollView {
+            VStack(spacing: 16) {
+
+                // Explanation card
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("The HMAC shared secret is provided by your hospital IT department. It authenticates this device to the IoMT backend over WebSocket.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(ColorPalette.inkSoft)
+                    Text("This is only needed if your hospital has issued this device for real-time hardware/BLE gateway streaming. Everything else in the app — Dashboard, Alerts, Devices — works normally without it.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(ColorPalette.inkMute)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(18)
+                .designCard(cornerRadius: 20)
+
+                // Input card
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("HMAC SHARED SECRET")
+                        .font(.system(size: 12, weight: .bold))
+                        .tracking(0.8)
+                        .foregroundStyle(ColorPalette.inkSoft)
+                    SecureField("Enter shared secret (min 32 chars)", text: $secretInput)
+                        .font(.system(size: 15))
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .padding(12)
+                        .background(ColorPalette.screenBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(ColorPalette.line, lineWidth: 1))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(18)
+                .designCard(cornerRadius: 20)
+
+                // Save button
+                Button { saveSecret() } label: {
+                    Text("Save to Keychain")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 15)
+                        .background(secretInput.count < 32 ? ColorPalette.inkMute : ColorPalette.brandBlue,
+                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(secretInput.count < 32)
+
+                if !statusMessage.isEmpty {
+                    HStack(spacing: 8) {
+                        Image(systemName: isSuccess ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundStyle(isSuccess ? ColorPalette.cardioGreen : ColorPalette.cardioRed)
+                        Text(statusMessage)
+                            .font(.system(size: 13))
+                            .foregroundStyle(ColorPalette.inkSoft)
+                        Spacer()
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background((isSuccess ? ColorPalette.greenSoft : ColorPalette.redSoft),
+                                in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
             }
+            .padding(16)
         }
+        .background(ColorPalette.screenBackground.ignoresSafeArea())
         .navigationTitle("Credentials")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -194,60 +330,74 @@ struct OnboardingView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 32) {
-                    VStack(spacing: 12) {
-                        Image(systemName: "lock.shield.fill")
-                            .font(.system(size: 64))
-                            .foregroundStyle(ColorPalette.brandBlue)
+                VStack(spacing: 28) {
+                    VStack(spacing: 14) {
+                        DIconTile(icon: "lock.shield.fill", tint: ColorPalette.blueSoft,
+                                  color: ColorPalette.brandBlue, size: 72, corner: 20, iconSize: 34)
                             .padding(.top, 40)
                         Text("Device Setup")
-                            .font(.largeTitle.bold())
+                            .font(.system(size: 28, weight: .heavy))
+                            .tracking(-0.6)
+                            .foregroundStyle(ColorPalette.ink)
                         Text("Ask your hospital IT department for the HMAC secret to activate this device.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 14))
+                            .foregroundStyle(ColorPalette.inkSoft)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
                     }
 
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("HMAC Shared Secret")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("HMAC SHARED SECRET")
+                            .font(.system(size: 12, weight: .bold))
+                            .tracking(0.8)
+                            .foregroundStyle(ColorPalette.inkSoft)
                         SecureField("Minimum 32 characters", text: $secretInput)
-                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 15))
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
+                            .padding(12)
+                            .background(ColorPalette.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(ColorPalette.line, lineWidth: 1))
                         Text("Stored securely in iOS Keychain — never transmitted.")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                            .font(.system(size: 12))
+                            .foregroundStyle(ColorPalette.inkMute)
                     }
                     .padding(.horizontal)
 
                     if !errorMessage.isEmpty {
-                        Text(errorMessage).font(.caption).foregroundStyle(.red)
+                        Text(errorMessage)
+                            .font(.system(size: 13))
+                            .foregroundStyle(ColorPalette.cardioRed)
                     }
 
-                    Button("Activate Device") {
+                    Button {
                         guard secretInput.count >= 32 else {
                             errorMessage = "Secret must be at least 32 characters"
                             return
                         }
                         do {
                             try keychainService.save(secretInput, for: .sharedSecret)
-                            // Re-evaluate isProvisioned via notification / environment
                             sessionManager.refreshProvisioning()
                             sessionManager.connect()
                         } catch {
                             errorMessage = error.localizedDescription
                         }
+                    } label: {
+                        Text("Activate Device")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 15)
+                            .background(secretInput.count < 32 ? ColorPalette.inkMute : ColorPalette.brandBlue,
+                                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.plain)
                     .disabled(secretInput.count < 32)
                     .padding(.horizontal)
 
                     Button("Sign Out") { authService.signOut() }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(ColorPalette.inkSoft)
                 }
                 .padding(.bottom, 40)
             }

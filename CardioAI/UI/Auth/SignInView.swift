@@ -58,17 +58,17 @@ struct SignInView: View {
                 // ── Feature highlights ───────────────────────────────────────
                 VStack(spacing: 14) {
                     FeatureRow(icon: "waveform.path.ecg",
-                               color: .red,
+                               tint: ColorPalette.redSoft, color: ColorPalette.cardioRed,
                                title: "24/7 Heart Monitoring",
                                subtitle: "Continuous ECG, BP & SpO₂ analysis")
                     FeatureRow(icon: "bell.badge.fill",
-                               color: .orange,
+                               tint: ColorPalette.amberSoft, color: ColorPalette.cardioAmber,
                                title: "Instant Critical Alerts",
                                subtitle: "Your care team notified in seconds")
                     FeatureRow(icon: "sensor.tag.radiowaves.forward.fill",
-                               color: .blue,
+                               tint: ColorPalette.blueSoft, color: ColorPalette.brandBlue,
                                title: "Wireless Device Sync",
-                               subtitle: "Bluetooth wearable → AI pipeline")
+                               subtitle: "Bluetooth wearable to AI pipeline")
                 }
                 .padding(.horizontal, 28)
 
@@ -167,28 +167,25 @@ struct SignInView: View {
 
 private struct FeatureRow: View {
     let icon:     String
+    let tint:     Color
     let color:    Color
     let title:    String
     let subtitle: String
 
     var body: some View {
-        HStack(spacing: 16) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(color)
-                .frame(width: 36)
+        HStack(spacing: 14) {
+            DIconTile(icon: icon, tint: tint, color: color, size: 40, corner: 12, iconSize: 17)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
+                    .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(ColorPalette.ink)
                 Text(subtitle)
-                    .font(.caption)
+                    .font(.system(size: 12))
                     .foregroundStyle(ColorPalette.inkSoft)
             }
             Spacer()
         }
         .padding(14)
-        .cardSurface(cornerRadius: 12)
+        .designCard(cornerRadius: 16)
     }
 }

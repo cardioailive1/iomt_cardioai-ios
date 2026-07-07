@@ -195,3 +195,90 @@ extension View {
         self.background(ColorPalette.screenBackground.ignoresSafeArea())
     }
 }
+
+// MARK: - Shared design-language components (dashboard look)
+
+/// Rounded-rect tinted icon tile used across cards (soft fill + colored SF Symbol).
+/// Matches the dashboard `VitalTile` / `AlertDesignRow` icon treatment.
+struct DIconTile: View {
+    let icon: String
+    let tint: Color
+    let color: Color
+    var size: CGFloat = 36
+    var corner: CGFloat = 10
+    var iconSize: CGFloat = 15
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .fill(tint)
+                .frame(width: size, height: size)
+            Image(systemName: icon)
+                .font(.system(size: iconSize, weight: .semibold))
+                .foregroundStyle(color)
+        }
+    }
+}
+
+/// Large screen headline in the dashboard design language:
+/// optional small soft subtitle above a heavy, tight-tracked `ink` title.
+/// Use in place of `.navigationTitle(_:).navigationBarTitleDisplayMode(.large)`
+/// so every top-level screen reads like the dashboard greeting.
+struct DScreenHeader: View {
+    let title: String
+    var subtitle: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let subtitle {
+                Text(subtitle)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(ColorPalette.inkSoft)
+            }
+            Text(title)
+                .font(.system(size: 26, weight: .heavy))
+                .tracking(-0.6)
+                .foregroundStyle(ColorPalette.ink)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Small uppercase-free capsule pill (color-tinted) for statuses/badges.
+struct DPill: View {
+    let text: String
+    let color: Color
+    var body: some View {
+        Text(text)
+            .font(.system(size: 10.5, weight: .bold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(color.opacity(0.12), in: Capsule())
+    }
+}
+
+/// Full-width empty-state card in the dashboard design language.
+struct DEmptyState: View {
+    let icon: String
+    let tint: Color
+    let color: Color
+    let title: String
+    let message: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            DIconTile(icon: icon, tint: tint, color: color, size: 56, corner: 16, iconSize: 24)
+            Text(title)
+                .font(.system(size: 17, weight: .heavy))
+                .tracking(-0.3)
+                .foregroundStyle(ColorPalette.ink)
+            Text(message)
+                .font(.system(size: 13))
+                .foregroundStyle(ColorPalette.inkSoft)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 32).padding(.horizontal, 20)
+        .designCard(cornerRadius: 20)
+    }
+}

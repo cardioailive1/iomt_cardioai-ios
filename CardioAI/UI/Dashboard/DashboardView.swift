@@ -20,6 +20,10 @@ final class DashboardViewModel: ObservableObject {
     // ── Published state ────────────────────────────────────────────────────
     @Published private(set) var latestFrame:   RPMFrame?        = nil
     @Published private(set) var hrHistory:     [VitalSample]    = []
+    @Published private(set) var spo2History:   [VitalSample]    = []
+    @Published private(set) var systolicHistory:  [VitalSample] = []
+    @Published private(set) var diastolicHistory: [VitalSample] = []
+    @Published private(set) var qualityHistory:   [VitalSample] = []
     @Published private(set) var alerts:        [RPMAlert]        = []
     @Published private(set) var reports:       [ClinicalReport]  = []
     @Published private(set) var bridgeStatus:  BridgeStatus?     = nil
@@ -116,11 +120,30 @@ final class DashboardViewModel: ObservableObject {
 
     private func processFrame(_ frame: RPMFrame) {
         latestFrame = frame
-        if let hr = frame.heartRate {
-            hrHistory.append(VitalSample(timestamp: Date(), value: hr))
-            if hrHistory.count > maxHRHistory {
-                hrHistory.removeFirst(hrHistory.count - maxHRHistory)
-            }
+        let now = Date()
+        append(&hrHistory,        frame.heartRate, at: now)
+        append(&spo2History,      frame.spo2,      at: now)
+        append(&systolicHistory,  frame.systolic,  at: now)
+        append(&diastolicHistory, frame.diastolic, at: now)
+        append(&qualityHistory,   frame.qualityScore * 100, at: now)
+    }
+
+    /// Appends a live sample and trims to `maxHRHistory`, matching the HR buffer.
+    private func append(_ buffer: inout [VitalSample], _ value: Double?, at time: Date) {
+        guard let value else { return }
+        buffer.append(VitalSample(timestamp: time, value: value))
+        if buffer.count > maxHRHistory {
+            buffer.removeFirst(buffer.count - maxHRHistory)
+        }
+    }
+
+    /// Live sample history for a given vitals metric (accumulated from RPM/BLE frames).
+    func history(for metric: VitalMetric) -> [VitalSample] {
+        switch metric {
+        case .heartRate:     return hrHistory
+        case .bloodPressure: return systolicHistory
+        case .oxygenSat:     return spo2History
+        case .dataQuality:   return qualityHistory
         }
     }
 
@@ -247,7 +270,7 @@ struct DashboardView: View {
                     .padding(.horizontal, 16)
 
                     // Vitals
-                    VitalsGridSection(frame: vm.latestFrame, hrHistory: vm.hrHistory)
+                    VitalsGridSection(vm: vm)
                         .padding(.horizontal, 16)
 
                     // Active alerts
@@ -540,49 +563,62 @@ struct HeroStatusCard: View {
 // ============================================================================
 
 struct VitalsGridSection: View {
-    let frame: RPMFrame?
-    let hrHistory: [VitalSample]
+    @ObservedObject var vm: DashboardViewModel
 
-    private var hrSpark: [Double] {
-        let vals = hrHistory.suffix(24).map(\.value)
-        return vals.count > 1 ? Array(vals) : [72, 74, 71, 76, 73, 70, 74, 72]
+    private var frame: RPMFrame? { vm.latestFrame }
+
+    private func spark(_ history: [VitalSample], fallback: [Double]) -> [Double] {
+        let vals = history.suffix(24).map(\.value)
+        return vals.count > 1 ? Array(vals) : fallback
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             DSectionTitle(title: "Vitals") {
-//                LinkLabel(text: "View all")
+                NavigationLink { VitalsDetailView(vm: vm) } label: { LinkLabel(text: "View all") }
             }
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10),
                                 GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                VitalTile(
-                    icon: "heart.fill",
-                    tint: ColorPalette.redSoft, color: ColorPalette.cardioRed,
-                    label: "Heart rate", live: true,
-                    value: frame?.heartRate.map { String(format: "%.0f", $0) } ?? "--",
-                    unit: "bpm", spark: hrSpark
-                )
-                VitalTile(
-                    icon: "waveform.path.ecg",
-                    tint: ColorPalette.blueSoft, color: ColorPalette.brandBlue,
-                    label: "Blood pressure", live: false,
-                    value: bpString, unit: "mmHg",
-                    spark: [118, 121, 119, 122, 117, 120, 119]
-                )
-                VitalTile(
-                    icon: "lungs.fill",
-                    tint: ColorPalette.oxygenSoft, color: ColorPalette.oxygenCyan,
-                    label: "Oxygen sat.", live: false,
-                    value: frame?.spo2.map { String(format: "%.0f", $0) } ?? "--",
-                    unit: "%", spark: [97, 98, 98, 99, 97, 98, 98]
-                )
-                VitalTile(
-                    icon: "checkmark.seal.fill",
-                    tint: ColorPalette.greenSoft, color: ColorPalette.cardioGreen,
-                    label: "Data quality", live: false,
-                    value: frame.map { String(format: "%.0f", $0.qualityScore * 100) } ?? "--",
-                    unit: "%", spark: [88, 92, 90, 95, 93, 96, 94]
-                )
+                NavigationLink { VitalsDetailView(vm: vm, initialMetric: .heartRate) } label: {
+                    VitalTile(
+                        icon: "heart.fill",
+                        tint: ColorPalette.redSoft, color: ColorPalette.cardioRed,
+                        label: "Heart rate", live: true,
+                        value: frame?.heartRate.map { String(format: "%.0f", $0) } ?? "--",
+                        unit: "bpm", spark: spark(vm.hrHistory, fallback: [72, 74, 71, 76, 73, 70, 74, 72])
+                    )
+                }
+                .buttonStyle(.plain)
+                NavigationLink { VitalsDetailView(vm: vm, initialMetric: .bloodPressure) } label: {
+                    VitalTile(
+                        icon: "waveform.path.ecg",
+                        tint: ColorPalette.blueSoft, color: ColorPalette.brandBlue,
+                        label: "Blood pressure", live: false,
+                        value: bpString, unit: "mmHg",
+                        spark: spark(vm.systolicHistory, fallback: [118, 121, 119, 122, 117, 120, 119])
+                    )
+                }
+                .buttonStyle(.plain)
+                NavigationLink { VitalsDetailView(vm: vm, initialMetric: .oxygenSat) } label: {
+                    VitalTile(
+                        icon: "lungs.fill",
+                        tint: ColorPalette.oxygenSoft, color: ColorPalette.oxygenCyan,
+                        label: "Oxygen sat.", live: false,
+                        value: frame?.spo2.map { String(format: "%.0f", $0) } ?? "--",
+                        unit: "%", spark: spark(vm.spo2History, fallback: [97, 98, 98, 99, 97, 98, 98])
+                    )
+                }
+                .buttonStyle(.plain)
+                NavigationLink { VitalsDetailView(vm: vm, initialMetric: .dataQuality) } label: {
+                    VitalTile(
+                        icon: "checkmark.seal.fill",
+                        tint: ColorPalette.greenSoft, color: ColorPalette.cardioGreen,
+                        label: "Data quality", live: false,
+                        value: frame.map { String(format: "%.0f", $0.qualityScore * 100) } ?? "--",
+                        unit: "%", spark: spark(vm.qualityHistory, fallback: [88, 92, 90, 95, 93, 96, 94])
+                    )
+                }
+                .buttonStyle(.plain)
             }
         }
     }

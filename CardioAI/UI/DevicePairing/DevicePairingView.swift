@@ -21,6 +21,8 @@ struct DevicePairingView: View {
                 ScrollView {
                     VStack(spacing: 20) {
 
+                        DScreenHeader(title: "Connect Device", subtitle: "Pairing")
+
                         // Status card
                         PairingStatusCard(state: pairingService.pairingState,
                                           framesSynced: pairingService.framesSynced,
@@ -52,8 +54,7 @@ struct DevicePairingView: View {
                     .padding()
                 }
             }
-            .navigationTitle("Connect Device")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if pairingService.isStreaming {
@@ -167,36 +168,32 @@ struct ExternalSourcesSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("OTHER DATA SOURCES")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
-                .tracking(1)
+            DSectionTitle("Other sources")
 
             // Apple Watch
-            HStack(spacing: 14) {
-                Image(systemName: "applewatch")
-                    .font(.title2)
-                    .foregroundStyle(pairingService.appleWatchConnected ? ColorPalette.cardioGreen : ColorPalette.brandBlue)
-                    .frame(width: 36)
-
+            HStack(spacing: 12) {
+                DIconTile(
+                    icon: "applewatch",
+                    tint: (pairingService.appleWatchConnected ? ColorPalette.cardioGreen : ColorPalette.brandBlue).opacity(0.14),
+                    color: pairingService.appleWatchConnected ? ColorPalette.cardioGreen : ColorPalette.brandBlue,
+                    size: 40, corner: 12, iconSize: 18
+                )
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Apple Watch")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(ColorPalette.ink)
-                    Text(pairingService.appleWatchConnected ? "Connected — syncing heart rate" : "Reads heart rate from Apple Health")
-                        .font(.caption2)
+                    Text(pairingService.appleWatchConnected ? "Connected · syncing heart rate" : "Reads heart rate from Apple Health")
+                        .font(.system(size: 12))
                         .foregroundStyle(ColorPalette.inkSoft)
                 }
-                Spacer()
+                Spacer(minLength: 6)
 
                 if isConnectingWatch {
                     ProgressView().tint(ColorPalette.brandBlue)
                 } else if pairingService.appleWatchConnected {
                     Button("Disconnect") { pairingService.disconnectAppleWatch() }
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(ColorPalette.cardioRed)
                 } else {
                     Button("Connect") {
                         isConnectingWatch = true
@@ -205,44 +202,43 @@ struct ExternalSourcesSection: View {
                             isConnectingWatch = false
                         }
                     }
-                    .font(.caption)
-                    .fontWeight(.semibold)
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(ColorPalette.brandBlue)
                 }
             }
             .padding(14)
-            .cardSurface(cornerRadius: 12)
+            .designCard(cornerRadius: 16)
 
             // Fitbit
             if fitbitEnabled {
-            HStack(spacing: 14) {
-                Image(systemName: "figure.walk.circle")
-                    .font(.title2)
-                    .foregroundStyle(pairingService.fitbitConnected ? ColorPalette.cardioGreen : ColorPalette.brandBlue)
-                    .frame(width: 36)
-
+            HStack(spacing: 12) {
+                DIconTile(
+                    icon: "figure.walk.circle",
+                    tint: (pairingService.fitbitConnected ? ColorPalette.cardioGreen : ColorPalette.brandBlue).opacity(0.14),
+                    color: pairingService.fitbitConnected ? ColorPalette.cardioGreen : ColorPalette.brandBlue,
+                    size: 40, corner: 12, iconSize: 18
+                )
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Fitbit")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(ColorPalette.ink)
-                    Text(pairingService.fitbitConnected ? "Connected — syncing heart rate" : "Sign in with your Fitbit account")
-                        .font(.caption2)
+                    Text(pairingService.fitbitConnected ? "Connected · syncing heart rate" : "Sign in with your Fitbit account")
+                        .font(.system(size: 12))
                         .foregroundStyle(ColorPalette.inkSoft)
                     if let error = pairingService.fitbitError {
                         Text(error)
-                            .font(.caption2)
-                            .foregroundStyle(.red)
+                            .font(.system(size: 12))
+                            .foregroundStyle(ColorPalette.cardioRed)
                     }
                 }
-                Spacer()
+                Spacer(minLength: 6)
 
                 if isConnectingFitbit {
                     ProgressView().tint(ColorPalette.brandBlue)
                 } else if pairingService.fitbitConnected {
                     Button("Disconnect") { pairingService.disconnectFitbit() }
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(ColorPalette.cardioRed)
                 } else {
                     Button("Connect") {
                         isConnectingFitbit = true
@@ -251,13 +247,12 @@ struct ExternalSourcesSection: View {
                             isConnectingFitbit = false
                         }
                     }
-                    .font(.caption)
-                    .fontWeight(.semibold)
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(ColorPalette.brandBlue)
                 }
             }
             .padding(14)
-            .cardSurface(cornerRadius: 12)
+            .designCard(cornerRadius: 16)
             }
         }
     }
@@ -276,27 +271,29 @@ struct PairingStatusCard: View {
                 statusIcon
                 VStack(alignment: .leading, spacing: 4) {
                     Text(statusTitle)
-                        .font(.headline)
+                        .font(.system(size: 16, weight: .heavy))
+                        .tracking(-0.3)
                         .foregroundStyle(ColorPalette.ink)
                     Text(statusSubtitle)
-                        .font(.caption)
+                        .font(.system(size: 12.5))
                         .foregroundStyle(ColorPalette.inkSoft)
                 }
                 Spacer()
                 if framesSynced > 0 {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text("\(framesSynced)")
-                            .font(.system(.title3, design: .rounded, weight: .bold))
+                            .font(.system(size: 22, weight: .heavy))
+                            .tracking(-0.4)
                             .foregroundStyle(ColorPalette.cardioGreen)
                         Text("frames synced")
-                            .font(.caption2)
+                            .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(ColorPalette.inkSoft)
                     }
                 }
             }
         }
-        .padding()
-        .cardSurface()
+        .padding(18)
+        .designCard(cornerRadius: 20)
     }
 
     @ViewBuilder
@@ -365,45 +362,40 @@ struct DeviceListSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("NEARBY DEVICES")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
-                .tracking(1)
+            DSectionTitle("Nearby devices", accent: "\(devices.count)", accentColor: ColorPalette.brandBlue)
 
             ForEach(devices) { device in
                 Button {
                     pairingService.connect(to: device)
                 } label: {
-                    HStack(spacing: 14) {
-                        Image(systemName: deviceIcon(name: device.name))
-                            .font(.title2)
-                            .foregroundStyle(ColorPalette.brandBlue)
-                            .frame(width: 36)
-
+                    HStack(spacing: 12) {
+                        DIconTile(
+                            icon: deviceIcon(name: device.name),
+                            tint: ColorPalette.blueSoft, color: ColorPalette.brandBlue,
+                            size: 40, corner: 12, iconSize: 17
+                        )
                         VStack(alignment: .leading, spacing: 3) {
                             Text(device.name)
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
+                                .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(ColorPalette.ink)
                             if let known = KnownBLEDevices.match(name: device.name) {
                                 Text(known.displayLabel)
-                                    .font(.caption2)
+                                    .font(.system(size: 11, weight: .semibold))
                                     .foregroundStyle(ColorPalette.brandBlue)
                             }
                             Text(device.id.uuidString.prefix(8).uppercased())
-                                .font(.caption2)
+                                .font(.system(size: 11))
                                 .foregroundStyle(ColorPalette.inkSoft)
                                 .fontDesign(.monospaced)
                         }
 
-                        Spacer()
+                        Spacer(minLength: 6)
 
                         // Signal strength bars
                         SignalStrengthView(rssi: device.rssi)
                     }
                     .padding(14)
-                    .cardSurface(cornerRadius: 12)
+                    .designCard(cornerRadius: 16)
                 }
                 .buttonStyle(.plain)
             }
@@ -440,7 +432,7 @@ struct SignalStrengthView: View {
         HStack(alignment: .bottom, spacing: 2) {
             ForEach(1...4, id: \.self) { bar in
                 RoundedRectangle(cornerRadius: 1)
-                    .fill(bar <= bars ? Color.green : Color.gray.opacity(0.3))
+                    .fill(bar <= bars ? ColorPalette.cardioGreen : ColorPalette.line)
                     .frame(width: 4, height: CGFloat(bar * 4))
             }
         }
@@ -455,11 +447,18 @@ struct LiveReadingCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Live Readings", systemImage: "waveform.path.ecg")
-                .font(.headline)
-                .foregroundStyle(ColorPalette.cardioGreen)
+            HStack(spacing: 8) {
+                DIconTile(icon: "waveform.path.ecg", tint: ColorPalette.greenSoft,
+                          color: ColorPalette.cardioGreen, size: 28, corner: 8, iconSize: 13)
+                Text("Live readings")
+                    .font(.system(size: 15, weight: .bold))
+                    .tracking(-0.1)
+                    .foregroundStyle(ColorPalette.ink)
+                Spacer()
+                DPill(text: "LIVE", color: ColorPalette.cardioGreen)
+            }
 
-            Divider()
+            Rectangle().fill(ColorPalette.line).frame(height: 1)
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 ForEach(Array(reading.vitals.sorted(by: { $0.key < $1.key })), id: \.key) { key, value in
@@ -468,19 +467,19 @@ struct LiveReadingCard: View {
             }
 
             HStack {
-                Text("Quality: \(Int(reading.qualityScore * 100))%")
-                    .font(.caption)
+                Text("Quality \(Int(reading.qualityScore * 100))%")
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(ColorPalette.inkSoft)
                 Spacer()
                 Text(reading.timestamp, style: .time)
-                    .font(.caption)
+                    .font(.system(size: 12))
                     .foregroundStyle(ColorPalette.inkSoft)
             }
         }
-        .padding()
-        .cardSurface()
+        .padding(18)
+        .designCard(cornerRadius: 20)
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(ColorPalette.cardioGreen.opacity(0.3), lineWidth: 1)
         )
     }
@@ -524,13 +523,17 @@ struct MiniVitalCard: View {
 
 struct PairingInstructionsCard: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("How to connect", systemImage: "info.circle")
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                DIconTile(icon: "info.circle.fill", tint: ColorPalette.blueSoft,
+                          color: ColorPalette.brandBlue, size: 28, corner: 8, iconSize: 13)
+                Text("How to connect")
+                    .font(.system(size: 15, weight: .bold))
+                    .tracking(-0.1)
+                    .foregroundStyle(ColorPalette.ink)
+            }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 InstructionRow(number: "1", text: "Turn on your IoMT device and make sure it's charged")
                 InstructionRow(number: "2", text: "Keep the device within 1 metre of your iPhone")
                 InstructionRow(number: "3", text: "Tap 'Scan for Devices' above")
@@ -538,8 +541,8 @@ struct PairingInstructionsCard: View {
                 InstructionRow(number: "5", text: "Data will start syncing automatically once connected")
             }
         }
-        .padding()
-        .cardSurface()
+        .padding(18)
+        .designCard(cornerRadius: 20)
     }
 }
 
@@ -550,13 +553,12 @@ struct InstructionRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Text(number)
-                .font(.caption)
-                .fontWeight(.bold)
+                .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(width: 20, height: 20)
+                .frame(width: 22, height: 22)
                 .background(ColorPalette.brandBlue, in: Circle())
             Text(text)
-                .font(.caption)
+                .font(.system(size: 13))
                 .foregroundStyle(ColorPalette.inkSoft)
             Spacer()
         }
