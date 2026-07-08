@@ -12,7 +12,8 @@ final class SessionManager: ObservableObject {
     @Published var isConnected:     Bool   = false
     @Published var isProvisioned:   Bool   = false
     @Published var patientID:       String = ""
-    @Published var connectionLabel: String = "Not connected"
+    @Published var connectionLabel: String = "Not connected"          // technical — for Settings/troubleshooting
+    @Published var connectionPatientLabel: String = "Not connected"   // soft — for the patient-facing Dashboard
 
     private let bridgeClient:    BridgeClient
     private let keychainService: KeychainService
@@ -36,6 +37,7 @@ final class SessionManager: ObservableObject {
             .sink { [weak self] state in
                 self?.isConnected     = state.isActive
                 self?.connectionLabel = state.description
+                self?.connectionPatientLabel = state.patientFacingLabel
             }
             .store(in: &cancellables)
 

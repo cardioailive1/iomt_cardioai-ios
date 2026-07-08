@@ -21,7 +21,6 @@
 		AA000011 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100011 /* RootView.swift */; };
 		AA000012 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100012 /* MainTabView.swift */; };
 		AA000013 /* Dashboard/DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100013 /* Dashboard/DashboardView.swift */; };
-		AA000031 /* Vitals/VitalsDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100031 /* Vitals/VitalsDetailView.swift */; };
 		AA000014 /* Alerts/AlertsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100014 /* Alerts/AlertsView.swift */; };
 		AA000015 /* Devices/DevicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100015 /* Devices/DevicesView.swift */; };
 		AA000016 /* Settings/SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100016 /* Settings/SettingsView.swift */; };
@@ -32,6 +31,7 @@
 		AA000021 /* Auth/SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100021 /* Auth/SignInView.swift */; };
 		AA000022 /* DevicePairing/DevicePairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100022 /* DevicePairing/DevicePairingView.swift */; };
 		AA000030 /* CardioAITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100030 /* CardioAITests.swift */; };
+		AA000031 /* Vitals/VitalsDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100031 /* Vitals/VitalsDetailView.swift */; };
 		AA000040 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100040 /* Theme.swift */; };
 		AA000041 /* Health/FitbitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100041 /* Health/FitbitService.swift */; };
 		AA000042 /* Health/KnownBLEDevices.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100042 /* Health/KnownBLEDevices.swift */; };
@@ -62,7 +62,6 @@
 		AA100011 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		AA100012 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		AA100013 /* Dashboard/DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dashboard/DashboardView.swift; sourceTree = "<group>"; };
-		AA100031 /* Vitals/VitalsDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Vitals/VitalsDetailView.swift; sourceTree = "<group>"; };
 		AA100014 /* Alerts/AlertsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Alerts/AlertsView.swift; sourceTree = "<group>"; };
 		AA100015 /* Devices/DevicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Devices/DevicesView.swift; sourceTree = "<group>"; };
 		AA100016 /* Settings/SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings/SettingsView.swift; sourceTree = "<group>"; };
@@ -73,6 +72,7 @@
 		AA100021 /* Auth/SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth/SignInView.swift; sourceTree = "<group>"; };
 		AA100022 /* DevicePairing/DevicePairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePairing/DevicePairingView.swift; sourceTree = "<group>"; };
 		AA100030 /* CardioAITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardioAITests.swift; sourceTree = "<group>"; };
+		AA100031 /* Vitals/VitalsDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Vitals/VitalsDetailView.swift; sourceTree = "<group>"; };
 		AA100040 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		AA100041 /* Health/FitbitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/FitbitService.swift; sourceTree = "<group>"; };
 		AA100042 /* Health/KnownBLEDevices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/KnownBLEDevices.swift; sourceTree = "<group>"; };
@@ -380,7 +380,7 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_ENTITLEMENTS = CardioAI/CardioAI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = W9464NC4J7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -411,7 +411,7 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_ENTITLEMENTS = CardioAI/CardioAI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = W9464NC4J7;
 				ENABLE_PREVIEWS = NO;
 				GENERATE_INFOPLIST_FILE = NO;

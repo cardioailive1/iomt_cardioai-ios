@@ -251,8 +251,9 @@ struct DashboardView: View {
                     DashboardStatusStrip(
                         deviceStreaming: pairingService.isStreaming,
                         framesSynced:    pairingService.framesSynced,
-                        wsLabel:         sessionManager.connectionLabel,
+                        wsLabel:         sessionManager.connectionPatientLabel,
                         wsConnected:     sessionManager.isConnected,
+                        showWSChip:      sessionManager.isProvisioned,
                         lastUpdated:     vm.lastUpdated
                     )
 
@@ -339,6 +340,7 @@ struct DashboardStatusStrip: View {
     let framesSynced: Int
     let wsLabel: String
     let wsConnected: Bool
+    let showWSChip: Bool
     let lastUpdated: Date?
 
     var body: some View {
@@ -351,13 +353,21 @@ struct DashboardStatusStrip: View {
                     active: deviceStreaming,
                     color: deviceStreaming ? ColorPalette.cardioGreen : ColorPalette.inkMute
                 )
-                // WebSocket / HMAC auth state (surfaces "Failed: HMAC secret not provisioned")
-                StatusChip(
-                    icon: "antenna.radiowaves.left.and.right",
-                    label: wsLabel,
-                    active: wsConnected,
-                    color: wsConnected ? ColorPalette.cardioGreen : ColorPalette.cardioAmber
-                )
+                // WebSocket / hardware-bridge auth state. Only shown when the
+                // real-time bridge has actually been provisioned (hospital-owned
+                // hardware). Most patients never touch it, so a permanent chip
+                // for an unused feature is confusing noise — hide it entirely.
+                // The soft `wsLabel` ("Connected"/"Not connected") is used here;
+                // the raw technical detail ("Failed: HMAC secret not
+                // provisioned") stays in Settings → Status for troubleshooting.
+                if showWSChip {
+                    StatusChip(
+                        icon: "antenna.radiowaves.left.and.right",
+                        label: wsLabel,
+                        active: wsConnected,
+                        color: wsConnected ? ColorPalette.cardioGreen : ColorPalette.inkMute
+                    )
+                }
                 // BLE frame stream
                 StatusChip(
                     icon: "dot.radiowaves.left.and.right",

@@ -30,6 +30,24 @@ enum ConnectionState: Equatable {
         case .failed(let r):         return "Failed: \(r)"
         }
     }
+
+    /// A soft, non-technical label for patient-facing UI (the Dashboard's
+    /// status chip). Never surfaces raw internal error strings like "HMAC
+    /// secret not provisioned" — those are meaningful for
+    /// troubleshooting/Settings, not for a patient's home screen. This is
+    /// the real-time hardware bridge, which most patients never provision
+    /// at all (see RootView.swift) — when it's simply never been set up,
+    /// that's not a "failure," it's just an unused optional feature.
+    var patientFacingLabel: String {
+        switch self {
+        case .disconnected:     return "Not connected"
+        case .connecting:       return "Connecting..."
+        case .authenticating:   return "Connecting..."
+        case .connected:        return "Connected"
+        case .reconnecting:     return "Reconnecting..."
+        case .failed:           return "Not connected"
+        }
+    }
 }
 
 // MARK: - BridgeClient
