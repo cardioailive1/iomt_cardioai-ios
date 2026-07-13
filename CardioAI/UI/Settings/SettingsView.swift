@@ -12,6 +12,10 @@ struct SettingsView: View {
 
     private let cfg = AppConfiguration.shared
 
+    private var isPatient: Bool {
+        (authService.currentUser?.role.lowercased() ?? "") == "patient"
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -25,11 +29,17 @@ struct SettingsView: View {
                             SettingsRow(label: "Name",  value: user.displayName)
                             SettingsDivider()
                             SettingsRow(label: "Email", value: user.email)
-                            SettingsDivider()
-                            SettingsRow(label: "Role",  value: user.role.capitalized)
-                            if let pid = user.patientID {
+                            // Role and Patient ID are internal bookkeeping, not
+                            // meaningful to a patient looking at their own
+                            // settings — shown only for clinical staff, who may
+                            // reasonably want to confirm their own role/access.
+                            if !isPatient {
                                 SettingsDivider()
-                                SettingsRow(label: "Patient ID", value: pid)
+                                SettingsRow(label: "Role",  value: user.role.capitalized)
+                                if let pid = user.patientID {
+                                    SettingsDivider()
+                                    SettingsRow(label: "Patient ID", value: pid)
+                                }
                             }
                             SettingsDivider()
                             SettingsRow(label: "Signed in with", value: "Apple ID")
@@ -58,31 +68,41 @@ struct SettingsView: View {
                     }
 
                     // ── Backend Connection ─────────────────────────────────
-                    SettingsGroup(title: "Backend connection") {
-                        SettingsRow(label: "Status",
-                                    value: sessionManager.connectionLabel,
-                                    valueColor: sessionManager.isConnected ? ColorPalette.cardioGreen : ColorPalette.cardioAmber)
-                        SettingsDivider()
-                        SettingsRow(label: "Backend", value: cfg.backendWSURL.host ?? "—")
-                        SettingsDivider()
-                        SettingsRow(label: "Environment", value: cfg.environment.rawValue.capitalized)
-                        SettingsDivider()
-                        SettingsButtonRow(
-                            title: sessionManager.isConnected ? "Disconnect" : "Reconnect",
-                            tint: sessionManager.isConnected ? ColorPalette.cardioRed : ColorPalette.cardioGreen
-                        ) {
-                            if sessionManager.isConnected { sessionManager.disconnect() }
-                            else { sessionManager.connect() }
+                    //
+                    // This entire section describes the real-time WebSocket
+                    // hardware bridge — a hospital-IT-provisioned feature that
+                    // ordinary patients never touch (RootView and the Dashboard
+                    // connection chip already hide this same concept). Showing
+                    // raw connection status, backend hostnames, and environment
+                    // names to a patient is pure technical noise; clinical/admin
+                    // users may still need it for support, so it stays for them.
+                    if !isPatient {
+                        SettingsGroup(title: "Backend connection") {
+                            SettingsRow(label: "Status",
+                                        value: sessionManager.connectionLabel,
+                                        valueColor: sessionManager.isConnected ? ColorPalette.cardioGreen : ColorPalette.cardioAmber)
+                            SettingsDivider()
+                            SettingsRow(label: "Backend", value: cfg.backendWSURL.host ?? "—")
+                            SettingsDivider()
+                            SettingsRow(label: "Environment", value: cfg.environment.rawValue.capitalized)
+                            SettingsDivider()
+                            SettingsButtonRow(
+                                title: sessionManager.isConnected ? "Disconnect" : "Reconnect",
+                                tint: sessionManager.isConnected ? ColorPalette.cardioRed : ColorPalette.cardioGreen
+                            ) {
+                                if sessionManager.isConnected { sessionManager.disconnect() }
+                                else { sessionManager.connect() }
+                            }
                         }
-                    }
 
-                    // ── Security ───────────────────────────────────────────
-                    SettingsGroup(title: "Security") {
-                        SettingsRow(label: "Auth method", value: "Sign in with Apple")
-                        SettingsDivider()
-                        SettingsRow(label: "WS auth", value: "HMAC-SHA256 + JWT")
-                        SettingsDivider()
-                        SettingsLinkRow(title: "Manage Credentials") { CredentialsView() }
+                        // ── Security ───────────────────────────────────────
+                        SettingsGroup(title: "Security") {
+                            SettingsRow(label: "Auth method", value: "Sign in with Apple")
+                            SettingsDivider()
+                            SettingsRow(label: "WS auth", value: "HMAC-SHA256 + JWT")
+                            SettingsDivider()
+                            SettingsLinkRow(title: "Manage Credentials") { CredentialsView() }
+                        }
                     }
 
                     // ── About ──────────────────────────────────────────────
