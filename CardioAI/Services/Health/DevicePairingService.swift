@@ -27,10 +27,27 @@ enum CardioAIBLEService {
     static let primaryService    = CBUUID(string: "0000180D-0000-1000-8000-00805F9B34FB") // Heart Rate
     static let bloodPressure     = CBUUID(string: "00001810-0000-1000-8000-00805F9B34FB") // BP
     static let pulseOximeter     = CBUUID(string: "00001822-0000-1000-8000-00805F9B34FB") // SpO2
+    static let healthThermometer = CBUUID(string: "00001809-0000-1000-8000-00805F9B34FB") // Temperature
+    static let glucose           = CBUUID(string: "00001808-0000-1000-8000-00805F9B34FB") // Glucose meter
+    static let weightScale       = CBUUID(string: "0000181D-0000-1000-8000-00805F9B34FB") // Weight scale
+    static let bodyComposition   = CBUUID(string: "0000181B-0000-1000-8000-00805F9B34FB") // Body composition
 
     static let heartRateMeasurement = CBUUID(string: "00002A37-0000-1000-8000-00805F9B34FB")
     static let bloodPressureMeasurement = CBUUID(string: "00002A35-0000-1000-8000-00805F9B34FB")
     static let spo2Measurement      = CBUUID(string: "00002A5F-0000-1000-8000-00805F9B34FB")
+
+    /// Standard BLE health/medical GATT services the scan surfaces to the
+    /// patient. Anything not advertising one of these is filtered out so the
+    /// device list isn't cluttered with AirPods, speakers, phones, etc.
+    static let allHealthServices: [CBUUID] = [
+        primaryService,
+        bloodPressure,
+        pulseOximeter,
+        healthThermometer,
+        glucose,
+        weightScale,
+        bodyComposition,
+    ]
 }
 
 // MARK: - Pairing State
@@ -90,6 +107,12 @@ final class DevicePairingService: NSObject, ObservableObject {
     private let fitbitService:    FitbitService
 
     // ── BLE internals ──────────────────────────────────────────────────────
+    // Minimum signal strength (dBm) to surface a device. RSSI is negative:
+    // closer to 0 = stronger. Rough bar mapping:
+    //   > -60  ≈ 4 bars, -60…-70 ≈ 3 bars, -70…-80 ≈ 2 bars, < -80 ≈ 1 bar.
+    // -75 hides the weak 1–2 bar devices the patient can't reliably pair with.
+    private let minSignalRSSI = -75
+
     private var centralManager:   CBCentralManager!
     private var connectedPeripheral: CBPeripheral?
     private var discoveredDevices:   [UUID: DiscoveredDevice] = [:]
@@ -134,32 +157,22 @@ final class DevicePairingService: NSObject, ObservableObject {
         discoveredDevices = [:]
         pairingState = .scanning
 
-        // NOTE ON TESTING WITHOUT REAL HARDWARE:
-        // Passing `nil` here discovers ANY nearby BLE peripheral, not just
-        // ones advertising the standard Heart Rate/BP/SpO2 GATT services
-        // below. This is useful for validating the scan → list → connect
-        // UI flow in TestFlight when no compliant hardware is on hand yet.
+        // Scan is restricted to the standard health/medical GATT services
+        // (see CardioAIBLEService.allHealthServices). This surfaces only
+        // compliant health devices — heart rate monitors, BP cuffs, pulse
+        // oximeters, thermometers, glucometers, scales — and keeps the
+        // patient's list free of AirPods, speakers, phones and other nearby
+        // BLE clutter. It's also faster than an unfiltered scan.
         //
-        // Caveat: connecting to a non-compliant device (e.g. AirPods, a
-        // random BLE speaker) will succeed at the CoreBluetooth level, but
-        // won't produce any readings — parseCharacteristic() below only
-        // understands the standard Heart Rate/BP/SpO2 characteristic UUIDs,
-        // so `didUpdateValueFor` simply won't fire for anything else. It's
-        // genuinely useful for confirming pairing mechanics, not for
-        // confirming vitals actually stream.
-        //
-        // For production, restore the withServices: filter (the array
-        // below) so the scan only surfaces compliant health devices, which
-        // is both faster and avoids showing irrelevant nearby BLE clutter
-        // to patients.
-        let restrictToHealthServices = false  // ← set true for production
-
+        // TESTING WITHOUT REAL HARDWARE: temporarily set this to `nil` to
+        // discover ANY nearby BLE peripheral for validating the scan → list
+        // → connect UI flow. Connecting to a non-compliant device (AirPods,
+        // a BLE speaker) succeeds at the CoreBluetooth level but produces no
+        // readings — parseCharacteristic() only understands the standard
+        // Heart Rate/BP/SpO2 characteristic UUIDs, so `didUpdateValueFor`
+        // never fires. Useful for confirming pairing mechanics, not vitals.
         centralManager.scanForPeripherals(
-            withServices: restrictToHealthServices ? [
-                CardioAIBLEService.primaryService,
-                CardioAIBLEService.bloodPressure,
-                CardioAIBLEService.pulseOximeter,
-            ] : nil,
+            withServices: CardioAIBLEService.allHealthServices,
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
         // Stop scanning after 15 seconds
@@ -371,11 +384,16 @@ extension DevicePairingService: CBCentralManagerDelegate {
         advertisementData: [String: Any],
         rssi RSSI: NSNumber
     ) {
+        let rssi = RSSI.intValue
         Task { @MainActor in
+            // Drop weak-signal devices (1–2 bars). RSSI of 127 means "not
+            // available" from CoreBluetooth — treat that as unusable too.
+            guard rssi >= self.minSignalRSSI, rssi != 127 else { return }
+
             let name   = peripheral.name ?? advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? "Unknown Device"
             let device = DiscoveredDevice(id: peripheral.identifier,
                                          name: name,
-                                         rssi: RSSI.intValue,
+                                         rssi: rssi,
                                          peripheral: peripheral)
             self.discoveredDevices[peripheral.identifier] = device
             self.pairingState = .discovered(
