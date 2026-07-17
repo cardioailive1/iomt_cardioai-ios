@@ -68,7 +68,7 @@ final class GoogleHealthService: NSObject, ObservableObject {
 
     // ── Fill these in from your Google Cloud Console OAuth client ────────
     private let clientID    = "875586651219-mluk6di2f06flcj0mrl92fv8r644050b.apps.googleusercontent.com"
-    private let redirectURI = "cardioai://google-health-callback"
+    private let redirectURI = "com.googleusercontent.apps.875586651219-mluk6di2f06flcj0mrl92fv8r644050b:/oauth2redirect"
     private let scope       = "https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly"
 
     private let authorizeURL = "https://accounts.google.com/o/oauth2/v2/auth"
