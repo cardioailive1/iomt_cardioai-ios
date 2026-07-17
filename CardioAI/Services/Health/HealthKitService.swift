@@ -29,14 +29,34 @@ final class HealthKitService {
     func requestAuthorization() async {
         guard HKHealthStore.isHealthDataAvailable() else { return }
         try? await store.requestAuthorization(toShare: writeTypes, read: readTypes)
+        UserDefaults.standard.set(true, forKey: Self.authRequestedKey)
     }
 
-    /// True if the user has actually granted read access to heart rate —
-    /// requestAuthorization() can succeed at the OS level while the user
-    /// still denies specific types, so check this before relying on data
-    /// actually arriving.
-    var isHeartRateReadAuthorized: Bool {
-        store.authorizationStatus(for: HKQuantityType(.heartRate)) != .notDetermined
+    /// True once the system permission sheet has been shown. iOS deliberately
+    /// never reveals whether READ access was granted — authorizationStatus(for:)
+    /// only reports WRITE permission — so "we asked" is the only honest signal.
+    /// If the user denied reads, queries simply return no samples.
+    private static let authRequestedKey = "healthkit_auth_requested"
+    var authorizationRequested: Bool {
+        UserDefaults.standard.bool(forKey: Self.authRequestedKey)
+    }
+
+    /// Name of the Apple Watch writing heart rate into HealthKit (e.g.
+    /// "Rishi's Apple Watch"), or nil if no watch has contributed samples yet.
+    /// Watch/Health-originated sources carry a "com.apple.health" bundle prefix.
+    func fetchWatchSourceName() async -> String? {
+        guard HKHealthStore.isHealthDataAvailable() else { return nil }
+        return await withCheckedContinuation { continuation in
+            let query = HKSourceQuery(sampleType: HKQuantityType(.heartRate),
+                                      samplePredicate: nil) { _, sources, _ in
+                let watch = sources?.first {
+                    $0.bundleIdentifier.hasPrefix("com.apple.health")
+                    || $0.name.localizedCaseInsensitiveContains("watch")
+                }
+                continuation.resume(returning: watch?.name)
+            }
+            store.execute(query)
+        }
     }
 
     /// Starts observing new heart rate samples as Apple Watch (or any

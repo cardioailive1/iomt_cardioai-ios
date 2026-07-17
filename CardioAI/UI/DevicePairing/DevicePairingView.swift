@@ -158,7 +158,7 @@ struct DevicePairingView: View {
 
 struct ExternalSourcesSection: View {
     @EnvironmentObject var pairingService: DevicePairingService
-    @State private var isConnectingWatch  = false
+    @State private var showingWatchSheet  = false
     @State private var isConnectingFitbit = false
 
     // Fitbit hidden until FitbitService is migrated from the legacy Fitbit
@@ -170,44 +170,41 @@ struct ExternalSourcesSection: View {
         VStack(alignment: .leading, spacing: 10) {
             DSectionTitle("Other sources")
 
-            // Apple Watch
-            HStack(spacing: 12) {
-                DIconTile(
-                    icon: "applewatch",
-                    tint: (pairingService.appleWatchConnected ? ColorPalette.cardioGreen : ColorPalette.brandBlue).opacity(0.14),
-                    color: pairingService.appleWatchConnected ? ColorPalette.cardioGreen : ColorPalette.brandBlue,
-                    size: 40, corner: 12, iconSize: 18
-                )
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Apple Watch")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(ColorPalette.ink)
-                    Text(pairingService.appleWatchConnected ? "Connected · syncing heart rate" : "Reads heart rate from Apple Health")
-                        .font(.system(size: 12))
+            // Apple Watch — tapping opens the detection sheet. The watch
+            // can't be found via a BLE scan (iOS restriction): it pairs to
+            // the iPhone over Apple's private protocol, so detection uses
+            // WatchConnectivity and data arrives via HealthKit.
+            Button {
+                showingWatchSheet = true
+            } label: {
+                HStack(spacing: 12) {
+                    DIconTile(
+                        icon: "applewatch",
+                        tint: (pairingService.appleWatchConnected ? ColorPalette.cardioGreen : ColorPalette.brandBlue).opacity(0.14),
+                        color: pairingService.appleWatchConnected ? ColorPalette.cardioGreen : ColorPalette.brandBlue,
+                        size: 40, corner: 12, iconSize: 18
+                    )
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Apple Watch")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(ColorPalette.ink)
+                        Text(pairingService.appleWatchConnected ? "Connected · syncing heart rate" : "Tap to find your watch")
+                            .font(.system(size: 12))
+                            .foregroundStyle(pairingService.appleWatchConnected ? ColorPalette.cardioGreen : ColorPalette.inkSoft)
+                    }
+                    Spacer(minLength: 6)
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(ColorPalette.inkSoft)
                 }
-                Spacer(minLength: 6)
-
-                if isConnectingWatch {
-                    ProgressView().tint(ColorPalette.brandBlue)
-                } else if pairingService.appleWatchConnected {
-                    Button("Disconnect") { pairingService.disconnectAppleWatch() }
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(ColorPalette.cardioRed)
-                } else {
-                    Button("Connect") {
-                        isConnectingWatch = true
-                        Task {
-                            await pairingService.connectAppleWatch()
-                            isConnectingWatch = false
-                        }
-                    }
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(ColorPalette.brandBlue)
-                }
+                .padding(14)
+                .designCard(cornerRadius: 16)
             }
-            .padding(14)
-            .designCard(cornerRadius: 16)
+            .buttonStyle(.plain)
+            .sheet(isPresented: $showingWatchSheet) {
+                AppleWatchSheet()
+            }
 
             // Fitbit
             if fitbitEnabled {
@@ -254,6 +251,115 @@ struct ExternalSourcesSection: View {
             .padding(14)
             .designCard(cornerRadius: 16)
             }
+        }
+    }
+}
+
+// MARK: - Apple Watch Sheet
+//
+// Apple Watch is invisible to CoreBluetooth scans, so instead of a fake
+// "scanning" list this detects the actually-paired watch via WCSession
+// and shows its real name (from HealthKit heart-rate sources).
+
+struct AppleWatchSheet: View {
+    @EnvironmentObject var pairingService: DevicePairingService
+    @Environment(\.dismiss) var dismiss
+    @State private var isConnecting = false
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                ColorPalette.screenBackground.ignoresSafeArea()
+                content
+            }
+            .navigationTitle("Apple Watch")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+        .onAppear { pairingService.startWatchDetection() }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if !pairingService.watchPairingChecked {
+            VStack(spacing: 14) {
+                ProgressView()
+                    .tint(ColorPalette.brandBlue)
+                    .scaleEffect(1.4)
+                Text("Looking for your Apple Watch...")
+                    .font(.subheadline)
+                    .foregroundStyle(ColorPalette.inkSoft)
+            }
+
+        } else if !pairingService.isWatchPaired {
+            VStack(spacing: 12) {
+                Image(systemName: "applewatch.slash")
+                    .font(.system(size: 40))
+                    .foregroundStyle(ColorPalette.inkSoft)
+                Text("No Apple Watch found")
+                    .font(.headline)
+                    .foregroundStyle(ColorPalette.ink)
+                Text("No Apple Watch is paired with this iPhone. Pair one in the Watch app, then come back here.")
+                    .font(.footnote)
+                    .foregroundStyle(ColorPalette.inkSoft)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+
+        } else {
+            VStack(spacing: 16) {
+                HStack(spacing: 12) {
+                    DIconTile(
+                        icon: "applewatch",
+                        tint: ColorPalette.blueSoft, color: ColorPalette.brandBlue,
+                        size: 44, corner: 12, iconSize: 20
+                    )
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(pairingService.watchName ?? "Apple Watch")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(ColorPalette.ink)
+                        Text(pairingService.appleWatchConnected
+                             ? "Connected · syncing heart rate"
+                             : "Paired with this iPhone")
+                            .font(.system(size: 12))
+                            .foregroundStyle(pairingService.appleWatchConnected
+                                             ? ColorPalette.cardioGreen : ColorPalette.inkSoft)
+                    }
+                    Spacer(minLength: 6)
+
+                    if isConnecting {
+                        ProgressView().tint(ColorPalette.brandBlue)
+                    } else if pairingService.appleWatchConnected {
+                        Button("Disconnect") { pairingService.disconnectAppleWatch() }
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(ColorPalette.cardioRed)
+                    } else {
+                        Button("Connect") {
+                            isConnecting = true
+                            Task {
+                                await pairingService.connectAppleWatch()
+                                isConnecting = false
+                            }
+                        }
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(ColorPalette.brandBlue)
+                    }
+                }
+                .padding(14)
+                .designCard(cornerRadius: 16)
+
+                Text("Heart rate arrives through Apple Health — the Watch can't connect over Bluetooth directly. Grant Health access when prompted.")
+                    .font(.footnote)
+                    .foregroundStyle(ColorPalette.inkSoft)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+            }
+            .padding()
         }
     }
 }

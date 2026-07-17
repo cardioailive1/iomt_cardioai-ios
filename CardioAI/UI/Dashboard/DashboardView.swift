@@ -265,8 +265,10 @@ struct DashboardView: View {
                     HeroStatusCard(
                         bpm:          vm.latestFrame?.heartRate,
                         risk:         vm.riskStatus,
-                        isStreaming:  pairingService.isStreaming,
-                        sourceLabel:  pairingService.isStreaming ? "Live · sensor" : "No device"
+                        isStreaming:  pairingService.activeVitalsSource != .none,
+                        sourceLabel:  pairingService.activeVitalsSource == .none
+                                      ? "No source"
+                                      : "Live · \(pairingService.activeVitalsSourceLabel)"
                     )
                     .padding(.horizontal, 16)
 

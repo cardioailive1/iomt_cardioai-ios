@@ -10,6 +10,7 @@ struct RootView: View {
     @EnvironmentObject var sessionManager: SessionManager
     @EnvironmentObject var alertStore:     AlertStore
     @EnvironmentObject var deviceStore:    DeviceStore
+    @EnvironmentObject var pairingService: DevicePairingService
 
     var body: some View {
         Group {
@@ -48,6 +49,12 @@ struct RootView: View {
                         sessionManager.connect()
                         alertStore.startPolling()
                         deviceStore.startPolling()
+                    }
+                    .task {
+                        // First sign-in: show the HealthKit permission sheet.
+                        // HealthKit is the ambient default vitals source until
+                        // a BLE device connects (source arbitration).
+                        await pairingService.requestHealthAccessAfterLogin()
                     }
                     .onDisappear {
                         alertStore.stopPolling()
