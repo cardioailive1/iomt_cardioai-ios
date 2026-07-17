@@ -113,7 +113,7 @@ final class DevicePairingService: NSObject, ObservableObject {
     // wearable takes priority; otherwise HealthKit is the ambient default.
     // Only samples from the active source are pushed downstream, so the
     // dashboard never mixes a watch and a chest strap at the same time.
-    enum VitalsSource { case none, healthKit, ble }
+    enum VitalsSource { case none, healthKit, ble, fitbit }
     @Published private(set) var activeVitalsSource: VitalsSource = .none
 
     /// True while HealthKit heart-rate observation is running. Distinct from
@@ -127,6 +127,7 @@ final class DevicePairingService: NSObject, ObservableObject {
         switch activeVitalsSource {
         case .ble:       return connectedPeripheral?.name ?? pairedDeviceName ?? "Bluetooth device"
         case .healthKit: return "Apple Health"
+        case .fitbit:    return "Fitbit"
         case .none:      return "No source"
         }
     }
@@ -198,10 +199,15 @@ final class DevicePairingService: NSObject, ObservableObject {
 
     // MARK: - Vitals source arbitration
 
-    /// Recompute which source owns the vitals stream. BLE wins over HealthKit.
-    /// Call whenever BLE connects/disconnects or Health authorization changes.
+    /// Recompute which source owns the vitals stream. Priority:
+    /// Fitbit (explicit cloud) > BLE wearable > ambient HealthKit > none.
+    /// Only one explicit device (BLE/Fitbit/Watch) is ever connected at a
+    /// time — each connect path tears the others down first — so at most one
+    /// of fitbit/ble is set here. HealthKit remains the ambient fallback.
     private func recomputeSource() {
-        if connectedPeripheral != nil {
+        if fitbitConnected {
+            activeVitalsSource = .fitbit
+        } else if connectedPeripheral != nil {
             activeVitalsSource = .ble
         } else if healthKitObserving {
             activeVitalsSource = .healthKit
@@ -371,6 +377,9 @@ final class DevicePairingService: NSObject, ObservableObject {
             pairingState = .failed("No Apple Watch is paired with this iPhone. Pair one in the Watch app first.")
             return
         }
+        // Apple Watch (HealthKit) becomes the sole active source.
+        disconnect()          // drop any BLE wearable
+        deactivateFitbit()    // pause Fitbit (keep token)
         await healthKitService.requestAuthorization()
 
         // Stable per-installation pseudo-device ID, generated once and
@@ -410,17 +419,28 @@ final class DevicePairingService: NSObject, ObservableObject {
         recomputeSource()  // fall back to BLE if connected, else none
     }
 
-    // MARK: - Fitbit (via OAuth2 Web API)
+    // MARK: - Fitbit (via Google Health API)
     //
-    // See FitbitService.swift for why this looks different from BLE/Apple
+    // See GoogleHealthService.swift for why this looks different from BLE/Apple
     // Watch (cloud OAuth2 + polling rather than local streaming). Same
     // destination pipeline as everything else: pushReadingToBackend().
 
     func connectFitbit() async {
-        await fitbitService.connect()
-        guard fitbitService.isConnected else {
-            fitbitError = fitbitService.lastError
-            return
+        // Fitbit becomes the sole active source: tear down any BLE wearable.
+        // Ambient HealthKit keeps observing but is gated off below (it only
+        // pushes when activeVitalsSource == .healthKit), so it silently
+        // resumes as the fallback once Fitbit disconnects.
+        disconnect()  // cancels BLE peripheral if connected (no-op otherwise)
+
+        // Instant reconnect: skip the browser OAuth round-trip if a valid
+        // token is already in the keychain (e.g. we only paused Fitbit when
+        // switching to another device earlier this session).
+        if !fitbitService.isConnected {
+            await fitbitService.connect()
+            guard fitbitService.isConnected else {
+                fitbitError = fitbitService.lastError
+                return
+            }
         }
 
         let deviceID: String
@@ -438,11 +458,13 @@ final class DevicePairingService: NSObject, ObservableObject {
         )
 
         fitbitConnected = true
-        fitbitError      = nil
+        fitbitError     = nil
+        recomputeSource()  // Fitbit now owns the stream
 
         fitbitService.startPolling { [weak self] sample in
             guard let self else { return }
             Task { @MainActor in
+                guard self.activeVitalsSource == .fitbit else { return }  // another source took over
                 let reading = DeviceReading(
                     deviceID:    deviceID,
                     deviceType:  "activity_tracker",
@@ -455,9 +477,23 @@ final class DevicePairingService: NSObject, ObservableObject {
         }
     }
 
+    /// Full user-initiated disconnect (the Disconnect button): stops polling,
+    /// deletes the OAuth token, requires a fresh browser login to reconnect.
     func disconnectFitbit() {
-        fitbitService.disconnect()
+        fitbitService.disconnect()  // stops polling + deletes tokens
         fitbitConnected = false
+        recomputeSource()  // fall back to BLE / ambient HealthKit / none
+    }
+
+    /// Silent eviction used when another device is connected: stops the
+    /// Fitbit stream and flips the UI to disconnected, but KEEPS the OAuth
+    /// token so reconnecting is instant (see connectFitbit's isConnected
+    /// short-circuit).
+    private func deactivateFitbit() {
+        guard fitbitConnected else { return }
+        fitbitService.stopPolling()
+        fitbitConnected = false
+        recomputeSource()
     }
 
     // MARK: - Register device with backend
@@ -546,6 +582,7 @@ extension DevicePairingService: CBCentralManagerDelegate {
         didConnect peripheral: CBPeripheral
     ) {
         Task { @MainActor in
+            self.deactivateFitbit()  // BLE wearable takes over — pause Fitbit (keep token)
             self.connectedPeripheral = peripheral
             self.recomputeSource()   // BLE now owns the vitals stream, overriding HealthKit
             peripheral.delegate      = self
