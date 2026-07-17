@@ -964,6 +964,6 @@ struct StatusRow: View {
 #Preview {
     DashboardView()
         .environmentObject(AuthService(keychainService: KeychainService(), apiClient: APIClient(keychainService: KeychainService())))
-        .environmentObject(DevicePairingService(keychainService: KeychainService(), bridgeClient: BridgeClient(keychainService: KeychainService()), apiClient: APIClient(keychainService: KeychainService()), healthKitService: HealthKitService(), fitbitService: FitbitService(keychainService: KeychainService())))
+        .environmentObject(DevicePairingService(keychainService: KeychainService(), bridgeClient: BridgeClient(keychainService: KeychainService()), apiClient: APIClient(keychainService: KeychainService()), healthKitService: HealthKitService(), fitbitService: GoogleHealthService(keychainService: KeychainService())))
         .environmentObject(SessionManager(bridgeClient: BridgeClient(keychainService: KeychainService()), keychainService: KeychainService(), authService: AuthService(keychainService: KeychainService(), apiClient: APIClient(keychainService: KeychainService()))))
 }

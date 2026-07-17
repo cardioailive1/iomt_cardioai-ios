@@ -33,7 +33,7 @@
 		AA000030 /* CardioAITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100030 /* CardioAITests.swift */; };
 		AA000031 /* Vitals/VitalsDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100031 /* Vitals/VitalsDetailView.swift */; };
 		AA000040 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100040 /* Theme.swift */; };
-		AA000041 /* Health/FitbitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100041 /* Health/FitbitService.swift */; };
+		AA000041 /* Health/GoogleHealthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100041 /* Health/GoogleHealthService.swift */; };
 		AA000042 /* Health/KnownBLEDevices.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100042 /* Health/KnownBLEDevices.swift */; };
 /* End PBXBuildFile section */
 
@@ -74,7 +74,7 @@
 		AA100030 /* CardioAITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardioAITests.swift; sourceTree = "<group>"; };
 		AA100031 /* Vitals/VitalsDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Vitals/VitalsDetailView.swift; sourceTree = "<group>"; };
 		AA100040 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
-		AA100041 /* Health/FitbitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/FitbitService.swift; sourceTree = "<group>"; };
+		AA100041 /* Health/GoogleHealthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/GoogleHealthService.swift; sourceTree = "<group>"; };
 		AA100042 /* Health/KnownBLEDevices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/KnownBLEDevices.swift; sourceTree = "<group>"; };
 		AA100098 /* CardioAI.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CardioAI.entitlements; sourceTree = "<group>"; };
 		AA100099 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -188,7 +188,7 @@
 				AA100017 /* Notifications/NotificationService.swift */,
 				AA100018 /* Health/HealthKitService.swift */,
 				AA100020 /* Health/DevicePairingService.swift */,
-				AA100041 /* Health/FitbitService.swift */,
+				AA100041 /* Health/GoogleHealthService.swift */,
 				AA100042 /* Health/KnownBLEDevices.swift */,
 			);
 			path = Services;
@@ -338,7 +338,7 @@
 				AA000018 /* Health/HealthKitService.swift in Sources */,
 				AA000019 /* AuthService.swift in Sources */,
 				AA000020 /* Health/DevicePairingService.swift in Sources */,
-				AA000041 /* Health/FitbitService.swift in Sources */,
+				AA000041 /* Health/GoogleHealthService.swift in Sources */,
 				AA000042 /* Health/KnownBLEDevices.swift in Sources */,
 				AA000021 /* Auth/SignInView.swift in Sources */,
 				AA000022 /* DevicePairing/DevicePairingView.swift in Sources */,

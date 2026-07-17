@@ -18,7 +18,6 @@
 import Foundation
 import CoreBluetooth
 import Combine
-import WatchConnectivity
 
 // MARK: - BLE Service / Characteristic UUIDs
 // These must match the UUIDs advertised by your IoMT hardware devices.
@@ -28,27 +27,10 @@ enum CardioAIBLEService {
     static let primaryService    = CBUUID(string: "0000180D-0000-1000-8000-00805F9B34FB") // Heart Rate
     static let bloodPressure     = CBUUID(string: "00001810-0000-1000-8000-00805F9B34FB") // BP
     static let pulseOximeter     = CBUUID(string: "00001822-0000-1000-8000-00805F9B34FB") // SpO2
-    static let healthThermometer = CBUUID(string: "00001809-0000-1000-8000-00805F9B34FB") // Temperature
-    static let glucose           = CBUUID(string: "00001808-0000-1000-8000-00805F9B34FB") // Glucose meter
-    static let weightScale       = CBUUID(string: "0000181D-0000-1000-8000-00805F9B34FB") // Weight scale
-    static let bodyComposition   = CBUUID(string: "0000181B-0000-1000-8000-00805F9B34FB") // Body composition
 
     static let heartRateMeasurement = CBUUID(string: "00002A37-0000-1000-8000-00805F9B34FB")
     static let bloodPressureMeasurement = CBUUID(string: "00002A35-0000-1000-8000-00805F9B34FB")
     static let spo2Measurement      = CBUUID(string: "00002A5F-0000-1000-8000-00805F9B34FB")
-
-    /// Standard BLE health/medical GATT services the scan surfaces to the
-    /// patient. Anything not advertising one of these is filtered out so the
-    /// device list isn't cluttered with AirPods, speakers, phones, etc.
-    static let allHealthServices: [CBUUID] = [
-        primaryService,
-        bloodPressure,
-        pulseOximeter,
-        healthThermometer,
-        glucose,
-        weightScale,
-        bodyComposition,
-    ]
 }
 
 // MARK: - Pairing State
@@ -97,40 +79,6 @@ final class DevicePairingService: NSObject, ObservableObject {
     @Published private(set) var fitbitConnected:     Bool = false
     @Published private(set) var fitbitError:         String?
 
-    // Real Apple Watch pairing state, from WatchConnectivity (the only
-    // supported way to ask "is a watch paired to this iPhone?"). Name comes
-    // from HealthKit heart-rate sources once the watch has written samples.
-    @Published private(set) var watchPairingChecked = false
-    @Published private(set) var isWatchPaired       = false
-    @Published private(set) var watchName: String?  = nil
-
-    // UserDefaults, deliberately NOT Keychain — Keychain survives app
-    // reinstall, which is exactly how the stale "Connected" bug happened.
-    private static let watchConnectedKey  = "apple_watch_user_connected"
-    private static let healthStreamOffKey = "healthkit_stream_disabled"
-
-    // Which source currently owns the displayed vitals. Rule: a connected BLE
-    // wearable takes priority; otherwise HealthKit is the ambient default.
-    // Only samples from the active source are pushed downstream, so the
-    // dashboard never mixes a watch and a chest strap at the same time.
-    enum VitalsSource { case none, healthKit, ble }
-    @Published private(set) var activeVitalsSource: VitalsSource = .none
-
-    /// True while HealthKit heart-rate observation is running. Distinct from
-    /// authorization: the user can disconnect Apple Watch (stop observing) while
-    /// Health access stays granted, so arbitration keys off this, not the
-    /// authorization status.
-    private var healthKitObserving = false
-
-    /// Human-readable name of the active source, for the dashboard indicator.
-    var activeVitalsSourceLabel: String {
-        switch activeVitalsSource {
-        case .ble:       return connectedPeripheral?.name ?? pairedDeviceName ?? "Bluetooth device"
-        case .healthKit: return "Apple Health"
-        case .none:      return "No source"
-        }
-    }
-
     // ── Streams ────────────────────────────────────────────────────────────
     let readingSubject = PassthroughSubject<DeviceReading, Never>()
 
@@ -142,12 +90,6 @@ final class DevicePairingService: NSObject, ObservableObject {
     private let fitbitService:    GoogleHealthService
 
     // ── BLE internals ──────────────────────────────────────────────────────
-    // Minimum signal strength (dBm) to surface a device. RSSI is negative:
-    // closer to 0 = stronger. Rough bar mapping:
-    //   > -60  ≈ 4 bars, -60…-70 ≈ 3 bars, -70…-80 ≈ 2 bars, < -80 ≈ 1 bar.
-    // -75 hides the weak 1–2 bar devices the patient can't reliably pair with.
-    private let minSignalRSSI = -75
-
     private var centralManager:   CBCentralManager!
     private var connectedPeripheral: CBPeripheral?
     private var discoveredDevices:   [UUID: DiscoveredDevice] = [:]
@@ -175,120 +117,8 @@ final class DevicePairingService: NSObject, ObservableObject {
         pairedDeviceID   = try? keychainService.read(.deviceID)
         pairedDeviceName = pairedDeviceID.map { "Device \($0.prefix(8))" }
 
-        // "Connected" requires the user to have explicitly tapped Connect in
-        // THIS installation — a stored Keychain device ID alone is not proof
-        // (it survives reinstalls, and the ambient HealthKit path also creates
-        // one). WCSession activation below additionally clears this if no
-        // watch is actually paired to the phone.
-        appleWatchConnected = UserDefaults.standard.bool(forKey: Self.watchConnectedKey)
-                              && healthKitService.authorizationRequested
+        appleWatchConnected = keychainService.exists(.appleWatchDeviceID)
         fitbitConnected     = keychainService.exists(.fitbitAccessToken)
-
-        // Ambient default: if Health access was requested in a previous
-        // session (and the user hasn't explicitly disconnected), resume
-        // HealthKit observation on launch without prompting. A BLE wearable,
-        // once connected, will suppress these samples (see recomputeSource).
-        if healthKitService.authorizationRequested,
-           !UserDefaults.standard.bool(forKey: Self.healthStreamOffKey) {
-            startHealthKitObservation()
-        }
-        recomputeSource()
-        startWatchDetection()
-    }
-
-    // MARK: - Vitals source arbitration
-
-    /// Recompute which source owns the vitals stream. BLE wins over HealthKit.
-    /// Call whenever BLE connects/disconnects or Health authorization changes.
-    private func recomputeSource() {
-        if connectedPeripheral != nil {
-            activeVitalsSource = .ble
-        } else if healthKitObserving {
-            activeVitalsSource = .healthKit
-        } else {
-            activeVitalsSource = .none
-        }
-    }
-
-    /// Start observing HealthKit heart rate. Shared by the ambient-launch path
-    /// and the explicit "Connect Apple Watch" flow. The callback only pushes
-    /// while HealthKit is the active source, so a connected BLE wearable
-    /// silently overrides the watch.
-    private func startHealthKitObservation() {
-        guard healthKitService.authorizationRequested else { return }
-
-        let deviceID: String
-        if let existing = try? keychainService.read(.appleWatchDeviceID) {
-            deviceID = existing
-        } else {
-            deviceID = "apple-watch-\(UUID().uuidString)"
-            try? keychainService.save(deviceID, for: .appleWatchDeviceID)
-        }
-
-        healthKitObserving = true
-        healthKitService.startObservingHeartRate { [weak self] bpm, _, date in
-            guard let self else { return }
-            Task { @MainActor in
-                guard self.activeVitalsSource == .healthKit else { return }  // BLE owns the stream
-                let reading = DeviceReading(
-                    deviceID:    deviceID,
-                    deviceType:  "activity_tracker",
-                    vitals:      ["heart_rate": bpm],
-                    qualityScore: 0.9,
-                    timestamp:   date
-                )
-                self.pushReadingToBackend(reading)
-            }
-        }
-    }
-
-    /// Ask for HealthKit access once, right after login. First run shows the
-    /// system permission sheet; later runs just make sure the ambient
-    /// HealthKit stream is running (unless the user explicitly disconnected).
-    func requestHealthAccessAfterLogin() async {
-        if !healthKitService.authorizationRequested {
-            await healthKitService.requestAuthorization()
-        }
-        if !UserDefaults.standard.bool(forKey: Self.healthStreamOffKey),
-           !healthKitObserving {
-            startHealthKitObservation()
-            recomputeSource()
-        }
-    }
-
-    // MARK: - Apple Watch detection (WatchConnectivity)
-    //
-    // Apple Watch never shows up in a CoreBluetooth scan — it pairs to the
-    // iPhone over Apple's private protocol and doesn't advertise GATT health
-    // services to third-party apps. WCSession is the only supported way to
-    // ask "is a watch paired to this phone?", and HealthKit sample sources
-    // are the only way to learn its name.
-
-    func startWatchDetection() {
-        guard WCSession.isSupported() else {
-            watchPairingChecked = true
-            isWatchPaired       = false
-            return
-        }
-        let session = WCSession.default
-        session.delegate = self
-        if session.activationState == .activated {
-            updateWatchPairing(from: session)
-        } else {
-            session.activate()   // result arrives in activationDidCompleteWith
-        }
-    }
-
-    private func updateWatchPairing(from session: WCSession) {
-        isWatchPaired       = session.isPaired
-        watchPairingChecked = true
-        if session.isPaired {
-            Task { self.watchName = await self.healthKitService.fetchWatchSourceName() }
-        } else {
-            // No watch on this phone — never show "Connected".
-            appleWatchConnected = false
-            UserDefaults.standard.set(false, forKey: Self.watchConnectedKey)
-        }
     }
 
     // MARK: - Scanning
@@ -301,22 +131,32 @@ final class DevicePairingService: NSObject, ObservableObject {
         discoveredDevices = [:]
         pairingState = .scanning
 
-        // Scan is restricted to the standard health/medical GATT services
-        // (see CardioAIBLEService.allHealthServices). This surfaces only
-        // compliant health devices — heart rate monitors, BP cuffs, pulse
-        // oximeters, thermometers, glucometers, scales — and keeps the
-        // patient's list free of AirPods, speakers, phones and other nearby
-        // BLE clutter. It's also faster than an unfiltered scan.
+        // NOTE ON TESTING WITHOUT REAL HARDWARE:
+        // Passing `nil` here discovers ANY nearby BLE peripheral, not just
+        // ones advertising the standard Heart Rate/BP/SpO2 GATT services
+        // below. This is useful for validating the scan → list → connect
+        // UI flow in TestFlight when no compliant hardware is on hand yet.
         //
-        // TESTING WITHOUT REAL HARDWARE: temporarily set this to `nil` to
-        // discover ANY nearby BLE peripheral for validating the scan → list
-        // → connect UI flow. Connecting to a non-compliant device (AirPods,
-        // a BLE speaker) succeeds at the CoreBluetooth level but produces no
-        // readings — parseCharacteristic() only understands the standard
-        // Heart Rate/BP/SpO2 characteristic UUIDs, so `didUpdateValueFor`
-        // never fires. Useful for confirming pairing mechanics, not vitals.
+        // Caveat: connecting to a non-compliant device (e.g. AirPods, a
+        // random BLE speaker) will succeed at the CoreBluetooth level, but
+        // won't produce any readings — parseCharacteristic() below only
+        // understands the standard Heart Rate/BP/SpO2 characteristic UUIDs,
+        // so `didUpdateValueFor` simply won't fire for anything else. It's
+        // genuinely useful for confirming pairing mechanics, not for
+        // confirming vitals actually stream.
+        //
+        // For production, restore the withServices: filter (the array
+        // below) so the scan only surfaces compliant health devices, which
+        // is both faster and avoids showing irrelevant nearby BLE clutter
+        // to patients.
+        let restrictToHealthServices = false  // ← set true for production
+
         centralManager.scanForPeripherals(
-            withServices: CardioAIBLEService.allHealthServices,
+            withServices: restrictToHealthServices ? [
+                CardioAIBLEService.primaryService,
+                CardioAIBLEService.bloodPressure,
+                CardioAIBLEService.pulseOximeter,
+            ] : nil,
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
         // Stop scanning after 15 seconds
@@ -353,7 +193,6 @@ final class DevicePairingService: NSObject, ObservableObject {
         isStreaming       = false
         connectedPeripheral = nil
         pairingState        = .idle
-        recomputeSource()  // BLE gone — fall back to HealthKit (if observing) or none
     }
 
     // MARK: - Apple Watch (via HealthKit)
@@ -367,11 +206,11 @@ final class DevicePairingService: NSObject, ObservableObject {
     // identically regardless of source.
 
     func connectAppleWatch() async {
-        guard isWatchPaired else {
-            pairingState = .failed("No Apple Watch is paired with this iPhone. Pair one in the Watch app first.")
+        await healthKitService.requestAuthorization()
+        guard healthKitService.isHeartRateReadAuthorized else {
+            pairingState = .failed("Health access was not granted. Enable it in Settings → Health → Data Access & Devices → CardioAI.")
             return
         }
-        await healthKitService.requestAuthorization()
 
         // Stable per-installation pseudo-device ID, generated once and
         // reused across app launches so the backend sees one consistent
@@ -391,28 +230,30 @@ final class DevicePairingService: NSObject, ObservableObject {
         )
 
         appleWatchConnected = true
-        UserDefaults.standard.set(true,  forKey: Self.watchConnectedKey)
-        UserDefaults.standard.set(false, forKey: Self.healthStreamOffKey)
 
-        startHealthKitObservation()
-        recomputeSource()  // now that Health is authorized, HealthKit may become active
+        healthKitService.startObservingHeartRate { [weak self] bpm, sourceName, date in
+            guard let self else { return }
+            Task { @MainActor in
+                let reading = DeviceReading(
+                    deviceID:    deviceID,
+                    deviceType:  "activity_tracker",
+                    vitals:      ["heart_rate": bpm],
+                    qualityScore: 0.9,
+                    timestamp:   date
+                )
+                self.pushReadingToBackend(reading)
+            }
+        }
     }
 
     func disconnectAppleWatch() {
         healthKitService.stopObservingHeartRate()
-        healthKitObserving = false
-        // Explicit opt-out: don't resurrect the HealthKit stream on next
-        // launch (see init). Cleared again when the user reconnects.
-        UserDefaults.standard.set(false, forKey: Self.watchConnectedKey)
-        UserDefaults.standard.set(true,  forKey: Self.healthStreamOffKey)
-        try? keychainService.delete(.appleWatchDeviceID)
         appleWatchConnected = false
-        recomputeSource()  // fall back to BLE if connected, else none
     }
 
     // MARK: - Fitbit (via OAuth2 Web API)
     //
-    // See FitbitService.swift for why this looks different from BLE/Apple
+    // See GoogleHealthService.swift for why this looks different from BLE/Apple
     // Watch (cloud OAuth2 + polling rather than local streaming). Same
     // destination pipeline as everything else: pushReadingToBackend().
 
@@ -523,16 +364,11 @@ extension DevicePairingService: CBCentralManagerDelegate {
         advertisementData: [String: Any],
         rssi RSSI: NSNumber
     ) {
-        let rssi = RSSI.intValue
         Task { @MainActor in
-            // Drop weak-signal devices (1–2 bars). RSSI of 127 means "not
-            // available" from CoreBluetooth — treat that as unusable too.
-            guard rssi >= self.minSignalRSSI, rssi != 127 else { return }
-
             let name   = peripheral.name ?? advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? "Unknown Device"
             let device = DiscoveredDevice(id: peripheral.identifier,
                                          name: name,
-                                         rssi: rssi,
+                                         rssi: RSSI.intValue,
                                          peripheral: peripheral)
             self.discoveredDevices[peripheral.identifier] = device
             self.pairingState = .discovered(
@@ -547,7 +383,6 @@ extension DevicePairingService: CBCentralManagerDelegate {
     ) {
         Task { @MainActor in
             self.connectedPeripheral = peripheral
-            self.recomputeSource()   // BLE now owns the vitals stream, overriding HealthKit
             peripheral.delegate      = self
             let device = self.discoveredDevices[peripheral.identifier]
                          ?? DiscoveredDevice(id: peripheral.identifier,
@@ -582,7 +417,6 @@ extension DevicePairingService: CBCentralManagerDelegate {
             self.isStreaming         = false
             self.connectedPeripheral = nil
             self.pairingState        = .idle
-            self.recomputeSource()   // BLE dropped — revert to HealthKit (if observing) or none
         }
     }
 
@@ -733,29 +567,6 @@ extension DevicePairingService: CBPeripheralDelegate {
         let mant  = Int16(bitPattern: raw & 0x0FFF)
         let exp   = Int(Int8(bitPattern: UInt8(raw >> 12)))
         return Double(mant) * pow(10.0, Double(exp))
-    }
-}
-
-// MARK: - WCSessionDelegate
-
-extension DevicePairingService: WCSessionDelegate {
-
-    nonisolated func session(
-        _ session: WCSession,
-        activationDidCompleteWith activationState: WCSessionActivationState,
-        error: Error?
-    ) {
-        Task { @MainActor in
-            self.updateWatchPairing(from: session)
-        }
-    }
-
-    nonisolated func sessionDidBecomeInactive(_ session: WCSession) { }
-
-    nonisolated func sessionDidDeactivate(_ session: WCSession) {
-        // Fires after the user switches to a different watch — reactivate
-        // to pick up the new one.
-        session.activate()
     }
 }
 
