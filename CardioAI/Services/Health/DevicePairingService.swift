@@ -87,6 +87,11 @@ final class DevicePairingService: NSObject, ObservableObject {
     @Published private(set) var lastReading:      DeviceReading? = nil
     @Published private(set) var framesSynced:     Int           = 0
 
+    // True after a scan completes without discovering any device. Lets the UI
+    // distinguish "never scanned" from "scanned, found nothing" — both of which
+    // leave pairingState at .idle.
+    @Published private(set) var lastScanFoundNothing: Bool = false
+
     // Apple Watch / Fitbit are separate, simpler connection states from
     // the BLE scan/discover/connect flow above — there's no nearby-device
     // list, just "authorize and start receiving data." Kept as their own
@@ -305,6 +310,7 @@ final class DevicePairingService: NSObject, ObservableObject {
             return
         }
         discoveredDevices = [:]
+        lastScanFoundNothing = false
         pairingState = .scanning
 
         // Scan is restricted to the standard health/medical GATT services
@@ -335,6 +341,7 @@ final class DevicePairingService: NSObject, ObservableObject {
     func stopScanning() {
         centralManager.stopScan()
         if case .scanning = pairingState {
+            lastScanFoundNothing = discoveredDevices.isEmpty
             pairingState = discoveredDevices.isEmpty
                 ? .idle
                 : .discovered(Array(discoveredDevices.values)

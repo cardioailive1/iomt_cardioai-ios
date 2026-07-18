@@ -46,9 +46,16 @@ struct DevicePairingView: View {
                             LiveReadingCard(reading: reading)
                         }
 
-                        // Instructions
+                        // Instructions — replaced by an empty-result card when
+                        // the last scan finished without finding any device.
                         if case .idle = pairingService.pairingState {
-                            PairingInstructionsCard()
+                            if pairingService.lastScanFoundNothing {
+                                NoDevicesFoundCard {
+                                    pairingService.startScanning()
+                                }
+                            } else {
+                                PairingInstructionsCard()
+                            }
                         }
                     }
                     .padding()
@@ -219,7 +226,9 @@ struct ExternalSourcesSection: View {
                     Text("Fitbit")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(ColorPalette.ink)
-                    Text(pairingService.fitbitConnected ? "Connected · syncing heart rate" : "Sign in with your Fitbit account")
+                    Text(pairingService.fitbitConnected
+                         ? "Connected · syncing heart rate"
+                         : "Not connected · sign in with your Fitbit account")
                         .font(.system(size: 12))
                         .foregroundStyle(ColorPalette.inkSoft)
                     if let error = pairingService.fitbitError {
@@ -645,6 +654,52 @@ struct PairingInstructionsCard: View {
                 InstructionRow(number: "3", text: "Tap 'Scan for Devices' above")
                 InstructionRow(number: "4", text: "Select your device from the list when it appears")
                 InstructionRow(number: "5", text: "Data will start syncing automatically once connected")
+            }
+        }
+        .padding(18)
+        .designCard(cornerRadius: 20)
+    }
+}
+
+// MARK: - No Devices Found Card
+//
+// Shown in place of PairingInstructionsCard once a scan has completed with an
+// empty result, so the screen doesn't fall back to generic setup steps after
+// the user has already tried.
+
+struct NoDevicesFoundCard: View {
+    let onRetry: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                DIconTile(icon: "antenna.radiowaves.left.and.right.slash",
+                          tint: ColorPalette.cardioAmber.opacity(0.14),
+                          color: ColorPalette.cardioAmber, size: 28, corner: 8, iconSize: 13)
+                Text("No devices found")
+                    .font(.system(size: 15, weight: .bold))
+                    .tracking(-0.1)
+                    .foregroundStyle(ColorPalette.ink)
+            }
+
+            Text("No nearby health device responded to the scan.")
+                .font(.system(size: 13))
+                .foregroundStyle(ColorPalette.inkSoft)
+
+            VStack(alignment: .leading, spacing: 10) {
+                InstructionRow(number: "1", text: "Turn the device on and check it's charged")
+                InstructionRow(number: "2", text: "Keep it within 1 metre of your iPhone")
+                InstructionRow(number: "3", text: "Make sure it isn't already connected to another phone")
+            }
+
+            Button(action: onRetry) {
+                Label("Scan Again", systemImage: "arrow.clockwise")
+                    .font(.system(size: 14, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(ColorPalette.brandBlue.opacity(0.12),
+                                in: RoundedRectangle(cornerRadius: 12))
+                    .foregroundStyle(ColorPalette.brandBlue)
             }
         }
         .padding(18)
