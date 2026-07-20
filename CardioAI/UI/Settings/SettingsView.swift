@@ -1,14 +1,23 @@
 // SettingsView.swift — dashboard design language (custom cards, no native Form).
 
 import SwiftUI
+import StoreKit
 
 struct SettingsView: View {
 
     @EnvironmentObject var sessionManager: SessionManager
     @EnvironmentObject var authService:    AuthService
     @EnvironmentObject var pairingService: DevicePairingService
+    @EnvironmentObject var subscriptionManager: SubscriptionManager
     @State private var showSignOutConfirm     = false
     @State private var showDisconnectConfirm  = false
+    @State private var showManageSubscription = false
+    @State private var showDeleteConfirm      = false
+    @State private var isDeleting             = false
+    @State private var deleteError: String?
+    @State private var isRestoring            = false
+    @State private var restoreSucceeded       = false
+    @State private var restoreMessage: String?
 
     private let cfg = AppConfiguration.shared
 
@@ -43,6 +52,46 @@ struct SettingsView: View {
                             }
                             SettingsDivider()
                             SettingsRow(label: "Signed in with", value: "Apple ID")
+                        }
+                    }
+
+                    // ── Plan & Billing ─────────────────────────────────────
+                    SettingsGroup(title: "Plan & Billing") {
+                        SettingsRow(
+                            label: "Current plan",
+                            value: subscriptionManager.isSubscribed ? "CardioAI Live Premium" : "No active plan",
+                            valueColor: subscriptionManager.isSubscribed ? ColorPalette.cardioGreen : ColorPalette.inkMute
+                        )
+                        if subscriptionManager.isSubscribed, let product = subscriptionManager.product {
+                            SettingsDivider()
+                            SettingsRow(label: "Price", value: "\(product.displayPrice) / month")
+                        }
+                        SettingsDivider()
+                        // Apple does not allow cancelling or changing a
+                        // subscription from inside the app — this sheet is the
+                        // only sanctioned route, and it hands off to the system
+                        // subscription manager.
+                        SettingsButtonRow(title: "Manage Subscription", tint: ColorPalette.brandBlue) {
+                            showManageSubscription = true
+                        }
+                        SettingsDivider()
+                        SettingsButtonRow(title: isRestoring ? "Restoring…" : "Restore Purchases",
+                                          tint: ColorPalette.brandBlue) {
+                            restorePurchases()
+                        }
+                        .disabled(isRestoring)
+
+                        // Restore is the one action here with no visible
+                        // side effect when it succeeds against an Apple ID
+                        // that never bought anything — without an explicit
+                        // result line it reads as a dead button.
+                        if let restoreMessage {
+                            SettingsDivider()
+                            Text(restoreMessage)
+                                .font(.system(size: 12))
+                                .foregroundStyle(restoreSucceeded ? ColorPalette.cardioGreen : ColorPalette.cardioRed)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 13)
                         }
                     }
 
@@ -114,18 +163,37 @@ struct SettingsView: View {
                         SettingsRow(label: "Client ID", value: cfg.clientID)
                     }
 
-                    // ── Sign Out ───────────────────────────────────────────
-                    Button {
-                        showSignOutConfirm = true
-                    } label: {
-                        Text("Sign Out")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(ColorPalette.cardioRed)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .designCard(cornerRadius: 20)
+                    // ── Data & Privacy ─────────────────────────────────────
+                    SettingsGroup(title: "Data & Privacy") {
+                        SettingsLinkRow(title: "Terms & Conditions") { TermsAndConditionsView() }
+                        SettingsDivider()
+                        SettingsLinkRow(title: "Privacy Policy") { PrivacyPolicyView() }
+                        SettingsDivider()
+                        // Apple's standard EULA — the default licence that
+                        // applies to any app that doesn't supply its own.
+                        SettingsExternalLinkRow(title: "Terms of Use (EULA)",
+                                                url: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")
                     }
-                    .buttonStyle(.plain)
+
+                    // ── Account actions ────────────────────────────────────
+                    SettingsGroup(title: "Account actions") {
+                        SettingsButtonRow(title: "Sign Out", role: .destructive) {
+                            showSignOutConfirm = true
+                        }
+                        SettingsDivider()
+                        SettingsButtonRow(title: isDeleting ? "Deleting…" : "Delete Account",
+                                          role: .destructive) {
+                            showDeleteConfirm = true
+                        }
+                        .disabled(isDeleting)
+                    }
+
+                    if let deleteError {
+                        Text(deleteError)
+                            .font(.system(size: 12))
+                            .foregroundStyle(ColorPalette.cardioRed)
+                            .multilineTextAlignment(.center)
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
@@ -157,6 +225,90 @@ struct SettingsView: View {
                 }
                 Button("Cancel", role: .cancel) { }
             }
+            .manageSubscriptionsSheet(isPresented: $showManageSubscription)
+            // Transaction.updates does NOT fire when a user cancels — a
+            // cancelled subscription stays entitled until the period ends, so
+            // there is no transaction to observe. Without this refresh,
+            // "Current plan" (and the isSubscribed check driving the delete
+            // dialog) can stay stale for the rest of the session.
+            .onChange(of: showManageSubscription) { _, isShowing in
+                guard !isShowing else { return }
+                Task { await subscriptionManager.refreshEntitlementStatus() }
+            }
+            .confirmationDialog(
+                subscriptionManager.willAutoRenew ? "Your subscription is still active" : "Delete your CardioAI account?",
+                isPresented: $showDeleteConfirm,
+                titleVisibility: .visible
+            ) {
+                // Nothing we can call cancels an auto-renewing subscription —
+                // Apple exposes no such API to developers. The only mechanism
+                // is the user doing it themselves, so while billing is still
+                // scheduled the destructive action is withheld and the only
+                // route forward is the system sheet.
+                //
+                // Gated on willAutoRenew, NOT isSubscribed: a user who has
+                // already cancelled stays subscribed until the period ends,
+                // and keying off isSubscribed would lock them out of deleting
+                // their own account for up to a month.
+                if subscriptionManager.willAutoRenew {
+                    Button("Cancel Subscription") { showManageSubscription = true }
+                }
+                // Always offered, even while billing is scheduled. Guideline
+                // 5.1.1(v) requires account deletion to be reachable; making
+                // it conditional on cancelling first is a rejection risk, and
+                // it would trap a user who wants out but does not care about
+                // the remaining period. Cancellation is presented first and
+                // the consequence is spelled out — informed, not blocked.
+                Button("Delete Account", role: .destructive) { deleteAccount() }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                if subscriptionManager.willAutoRenew {
+                    Text("Your subscription is set to renew. Deleting your account does not stop billing — only you can cancel it, in the App Store. We recommend cancelling first. Deleting is permanent and removes all cardiac data.")
+                } else {
+                    Text("This permanently deletes your account and all cardiac data. It cannot be undone.")
+                }
+            }
+        }
+    }
+
+    private func restorePurchases() {
+        isRestoring    = true
+        restoreMessage = nil
+        // Cleared up front: purchaseError persists from any earlier failure
+        // (including one raised on the paywall), and a stale value would be
+        // misreported as this restore failing.
+        subscriptionManager.purchaseError = nil
+        Task {
+            await subscriptionManager.restorePurchases()
+            if let error = subscriptionManager.purchaseError {
+                restoreSucceeded = false
+                restoreMessage   = error
+            } else {
+                // AppStore.sync() succeeding does not mean anything was
+                // found — it only means the lookup ran. The entitlement
+                // state after the refresh is what actually answers the user.
+                restoreSucceeded = subscriptionManager.isSubscribed
+                restoreMessage   = subscriptionManager.isSubscribed
+                    ? "Subscription restored."
+                    : "No active subscription found for this Apple ID."
+            }
+            isRestoring = false
+        }
+    }
+
+    private func deleteAccount() {
+        isDeleting  = true
+        deleteError = nil
+        Task {
+            do {
+                _ = try await DependencyContainer.shared.apiClient.deleteAccount()
+                sessionManager.disconnect()
+                pairingService.disconnect()
+                authService.signOut()
+            } catch {
+                deleteError = "Could not delete account: \(error.localizedDescription)"
+            }
+            isDeleting = false
         }
     }
 }
@@ -231,6 +383,27 @@ struct SettingsLinkRow<Destination: View>: View {
                     .foregroundStyle(ColorPalette.brandBlue)
                 Spacer()
                 Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(ColorPalette.inkMute)
+            }
+            .padding(.vertical, 13)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct SettingsExternalLinkRow: View {
+    let title: String
+    let url: String
+    var body: some View {
+        Link(destination: URL(string: url)!) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(ColorPalette.brandBlue)
+                Spacer()
+                Image(systemName: "arrow.up.right")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(ColorPalette.inkMute)
             }

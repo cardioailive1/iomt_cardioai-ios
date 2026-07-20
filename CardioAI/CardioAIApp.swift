@@ -25,6 +25,7 @@ struct CardioAIApp: App {
                 .environmentObject(container.deviceStore)
                 .environmentObject(container.bridgeClient)
                 .environmentObject(container.devicePairingService)
+                .environmentObject(container.subscriptionManager)
                 .tint(ColorPalette.brandBlue)
                 .preferredColorScheme(.light)
                 .task {

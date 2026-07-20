@@ -11,6 +11,7 @@ struct RootView: View {
     @EnvironmentObject var alertStore:     AlertStore
     @EnvironmentObject var deviceStore:    DeviceStore
     @EnvironmentObject var pairingService: DevicePairingService
+    @EnvironmentObject var subscriptionManager: SubscriptionManager
 
     var body: some View {
         Group {
@@ -43,23 +44,37 @@ struct RootView: View {
                 // show the main app and let device provisioning remain an
                 // optional step in Settings → Security → Manage Credentials
                 // for the hospital-owned devices that actually need it.
-                MainTabView()
-                    .transition(.opacity)
-                    .onAppear {
-                        sessionManager.connect()
-                        alertStore.startPolling()
-                        deviceStore.startPolling()
-                    }
-                    .task {
-                        // First sign-in: show the HealthKit permission sheet.
-                        // HealthKit is the ambient default vitals source until
-                        // a BLE device connects (source arbitration).
-                        await pairingService.requestHealthAccessAfterLogin()
-                    }
-                    .onDisappear {
-                        alertStore.stopPolling()
-                        deviceStore.stopPolling()
-                    }
+                //
+                // Subscription gate: added on top of the above fix, NOT a
+                // reversion of it — this checks App Store subscription
+                // entitlement (StoreKit 2), a completely different concern
+                // from hardware-bridge provisioning. See SubscriptionManager
+                // for the caveat that this only gates the app UI, not the
+                // backend API.
+                if subscriptionManager.isLoading {
+                    SplashView(message: "Checking subscription...")
+                } else if !subscriptionManager.isSubscribed {
+                    PaywallView()
+                        .transition(.opacity)
+                } else {
+                    MainTabView()
+                        .transition(.opacity)
+                        .onAppear {
+                            sessionManager.connect()
+                            alertStore.startPolling()
+                            deviceStore.startPolling()
+                        }
+                        .task {
+                            // First sign-in: show the HealthKit permission sheet.
+                            // HealthKit is the ambient default vitals source until
+                            // a BLE device connects (source arbitration).
+                            await pairingService.requestHealthAccessAfterLogin()
+                        }
+                        .onDisappear {
+                            alertStore.stopPolling()
+                            deviceStore.stopPolling()
+                        }
+                }
             }
         }
         .animation(.easeInOut(duration: 0.3), value: authService.isSignedIn)

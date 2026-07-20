@@ -29,6 +29,9 @@ final class DependencyContainer: ObservableObject {
     let healthKitService:    HealthKitService
     let fitbitService:       GoogleHealthService
 
+    // ── Subscription (gates the entire app — see SubscriptionManager.swift) ─
+    let subscriptionManager: SubscriptionManager
+
     private init() {
         keychainService      = KeychainService()
         apiClient            = APIClient(keychainService: keychainService)
@@ -49,5 +52,6 @@ final class DependencyContainer: ObservableObject {
             healthKitService: healthKitService,
             fitbitService:    fitbitService
         )
+        subscriptionManager  = SubscriptionManager()
     }
 }

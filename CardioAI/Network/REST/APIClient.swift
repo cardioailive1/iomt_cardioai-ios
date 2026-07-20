@@ -208,6 +208,16 @@ final class APIClient {
                                  useAuthSession: true)
     }
 
+    /// DELETE /auth/account — permanent account deletion. Required by App
+    /// Store Review Guideline 5.1.1(v) for any app that lets users create an
+    /// account. Deleting the account does NOT cancel an App Store
+    /// subscription — only the user can do that in Settings, which is why the
+    /// UI sends them to the manage-subscriptions sheet first.
+    func deleteAccount() async throws -> EmptyResponse {
+        return try await request("DELETE", path: "auth/account",
+                                 useAuthSession: true)
+    }
+
     // MARK: - Device endpoints
 
     /// POST /devices/register — register a paired BLE device.
