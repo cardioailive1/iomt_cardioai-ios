@@ -21,6 +21,12 @@ enum KeychainKey: String {
     case fitbitDeviceID      = "com.cardioai.iomt.fitbit_device_id"
     case fitbitAccessToken   = "com.cardioai.iomt.fitbit_access_token"
     case fitbitRefreshToken  = "com.cardioai.iomt.fitbit_refresh_token"
+    // CoreBluetooth peripheral identifier of the last-connected BLE wearable,
+    // used to auto-reconnect on launch. Distinct from `deviceID`, which is the
+    // backend device id and gets overwritten by whichever source registered
+    // last (BLE/Watch/Fitbit). Presence also marks "should be connected" — its
+    // absence tells didDisconnect a drop was user-initiated, not accidental.
+    case blePeripheralID     = "com.cardioai.iomt.ble_peripheral_id"
 }
 
 enum KeychainError: LocalizedError {

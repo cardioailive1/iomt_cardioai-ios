@@ -28,6 +28,24 @@ struct DevicePairingView: View {
                                           framesSynced: pairingService.framesSynced,
                                           lastReading: pairingService.lastReading)
 
+                        // Backend registration warning — link is up but the
+                        // server didn't register the device, so sync may be
+                        // incomplete.
+                        if let warning = pairingService.registrationWarning {
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(ColorPalette.cardioAmber)
+                                    .font(.system(size: 14))
+                                Text(warning)
+                                    .font(.system(size: 12.5))
+                                    .foregroundStyle(ColorPalette.ink)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(12)
+                            .background(ColorPalette.cardioAmber.opacity(0.12),
+                                        in: RoundedRectangle(cornerRadius: 12))
+                        }
+
                         // Action button
                         actionButton
 

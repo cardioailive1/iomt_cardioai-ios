@@ -37,17 +37,19 @@ enum CardioAIBLEService {
     static let bloodPressureMeasurement = CBUUID(string: "00002A35-0000-1000-8000-00805F9B34FB")
     static let spo2Measurement      = CBUUID(string: "00002A5F-0000-1000-8000-00805F9B34FB")
 
-    /// Standard BLE health/medical GATT services the scan surfaces to the
-    /// patient. Anything not advertising one of these is filtered out so the
-    /// device list isn't cluttered with AirPods, speakers, phones, etc.
-    static let allHealthServices: [CBUUID] = [
+    /// Services the app can actually READ — the scan surfaces only these so a
+    /// patient never connects to a device that yields no data. Must stay in
+    /// sync with parseCharacteristic() and the discoverServices() call in
+    /// didConnect: HR, BP, SpO2 are the only characteristics we decode.
+    ///
+    /// ponytail: glucose/thermometer/weight/bodyComposition intentionally
+    /// excluded — no parser exists for them yet. Add their UUID here AND a
+    /// parse<X>() branch together when that hardware is supported; listing a
+    /// service we can't decode just lets patients pair to a dead device.
+    static let supportedServices: [CBUUID] = [
         primaryService,
         bloodPressure,
         pulseOximeter,
-        healthThermometer,
-        glucose,
-        weightScale,
-        bodyComposition,
     ]
 }
 
@@ -91,6 +93,12 @@ final class DevicePairingService: NSObject, ObservableObject {
     // distinguish "never scanned" from "scanned, found nothing" — both of which
     // leave pairingState at .idle.
     @Published private(set) var lastScanFoundNothing: Bool = false
+
+    // Set when backend device registration fails (network/backend down). The
+    // BLE link is up and readings still stream over the WebSocket, but the
+    // backend may reject frames from an unregistered device — surface it so the
+    // patient knows sync may be incomplete rather than failing silently.
+    @Published private(set) var registrationWarning: String? = nil
 
     // Apple Watch / Fitbit are separate, simpler connection states from
     // the BLE scan/discover/connect flow above — there's no nearby-device
@@ -159,6 +167,24 @@ final class DevicePairingService: NSObject, ObservableObject {
     private var discoveredDevices:   [UUID: DiscoveredDevice] = [:]
     private var patientID:           String = ""
 
+    // Fires if a connect attempt hangs (CoreBluetooth's connect has no built-in
+    // timeout — it waits forever for an out-of-range/off device).
+    private var connectTimeoutTask: Task<Void, Never>?
+    private static let connectTimeoutSec: UInt64 = 10
+
+    // Bumped on every startScanning(). Each scan's 15s auto-stop captures the
+    // value at launch and only stops if it still matches, so a rapid "Scan
+    // Again" doesn't get killed by the previous scan's stale timer.
+    private var scanGeneration = 0
+
+    // Restoration identifier so iOS can relaunch us into the background and
+    // hand back the live central + peripherals via willRestoreState.
+    private static let restoreID = "com.cardioai.iomt.central"
+
+    // Guard so auto-reconnect only auto-fires once per launch (on first
+    // poweredOn), not on every subsequent Bluetooth state bounce.
+    private var didAttemptLaunchReconnect = false
+
     // MARK: - Init
 
     init(
@@ -174,7 +200,15 @@ final class DevicePairingService: NSObject, ObservableObject {
         self.healthKitService = healthKitService
         self.fitbitService    = fitbitService
         super.init()
-        centralManager = CBCentralManager(delegate: self, queue: .main)
+        // Restore identifier lets iOS relaunch the app in the background and
+        // restore the central + any connected peripheral (see willRestoreState),
+        // so a paired wearable keeps streaming across app termination — required
+        // for continuous RPM, and pairs with the bluetooth-central background mode.
+        centralManager = CBCentralManager(
+            delegate: self,
+            queue: .main,
+            options: [CBCentralManagerOptionRestoreIdentifierKey: Self.restoreID]
+        )
         patientID      = (try? keychainService.read(.patientID)) ?? ""
 
         // Restore previously paired device
@@ -306,12 +340,17 @@ final class DevicePairingService: NSObject, ObservableObject {
 
     func startScanning() {
         guard centralManager.state == .poweredOn else {
-            pairingState = .failed("Bluetooth is not enabled. Please turn on Bluetooth in Settings.")
+            // Use the real state (denied vs off vs unsupported) — telling a user
+            // to "turn on Bluetooth" when they actually denied permission is a
+            // dead end.
+            pairingState = .failed(centralManager.state.description)
             return
         }
         discoveredDevices = [:]
         lastScanFoundNothing = false
         pairingState = .scanning
+        scanGeneration += 1
+        let thisScan = scanGeneration
 
         // Scan is restricted to the standard health/medical GATT services
         // (see CardioAIBLEService.allHealthServices). This surfaces only
@@ -328,13 +367,16 @@ final class DevicePairingService: NSObject, ObservableObject {
         // Heart Rate/BP/SpO2 characteristic UUIDs, so `didUpdateValueFor`
         // never fires. Useful for confirming pairing mechanics, not vitals.
         centralManager.scanForPeripherals(
-            withServices: CardioAIBLEService.allHealthServices,
+            withServices: CardioAIBLEService.supportedServices,
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
-        // Stop scanning after 15 seconds
+        // Stop scanning after 15 seconds — but only if this is still the same
+        // scan (a newer startScanning() bumps scanGeneration).
         Task {
             try? await Task.sleep(nanoseconds: 15_000_000_000)
-            if case .scanning = pairingState { stopScanning() }
+            if thisScan == scanGeneration, case .scanning = pairingState {
+                stopScanning()
+            }
         }
     }
 
@@ -355,11 +397,37 @@ final class DevicePairingService: NSObject, ObservableObject {
         pairingState = .connecting(device)
         centralManager.stopScan()
         centralManager.connect(device.peripheral, options: nil)
+        startConnectTimeout(for: device)
+    }
+
+    /// CoreBluetooth's connect never times out on its own, so a device that's
+    /// off or out of range leaves the UI stuck on "Connecting…" forever. Cancel
+    /// the pending connection and surface a failure after connectTimeoutSec.
+    private func startConnectTimeout(for device: DiscoveredDevice) {
+        connectTimeoutTask?.cancel()
+        connectTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.connectTimeoutSec * 1_000_000_000)
+            guard let self, !Task.isCancelled else { return }
+            if case .connecting = self.pairingState {
+                self.centralManager.cancelPeripheralConnection(device.peripheral)
+                self.pairingState = .failed("\(device.name) didn't respond. Move it closer and try again.")
+            }
+        }
+    }
+
+    private func cancelConnectTimeout() {
+        connectTimeoutTask?.cancel()
+        connectTimeoutTask = nil
     }
 
     // MARK: - Disconnect
 
     func disconnect() {
+        cancelConnectTimeout()
+        // Delete the stored peripheral id BEFORE cancelling so didDisconnect
+        // sees "no stored device" and treats this as intentional (no auto-
+        // reconnect). An accidental drop leaves the id in place.
+        try? keychainService.delete(.blePeripheralID)
         if let peripheral = connectedPeripheral {
             centralManager.cancelPeripheralConnection(peripheral)
         }
@@ -520,8 +588,10 @@ final class DevicePairingService: NSObject, ObservableObject {
             try? keychainService.save(deviceID, for: .deviceID)
             pairedDeviceID   = deviceID
             pairedDeviceName = deviceName
+            registrationWarning = nil
             logger_ios.info("[BLE] device registered with backend: \(deviceID)")
         } catch {
+            registrationWarning = "Couldn't register \(deviceName) with the server. Live data may not be saved until you reconnect."
             logger_ios.warning("[BLE] backend registration failed: \(error.localizedDescription)")
         }
     }
@@ -554,8 +624,61 @@ extension DevicePairingService: CBCentralManagerDelegate {
 
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
         Task { @MainActor in
-            if central.state != .poweredOn {
-                self.pairingState = .failed("Bluetooth unavailable: \(central.state.description)")
+            if central.state == .poweredOn {
+                // First power-on this launch: reconnect the last-paired wearable
+                // without making the patient re-scan. Skipped if a peripheral was
+                // already handed back via willRestoreState.
+                if !self.didAttemptLaunchReconnect {
+                    self.didAttemptLaunchReconnect = true
+                    self.attemptAutoReconnect()
+                }
+            } else {
+                self.pairingState = .failed(central.state.description)
+            }
+        }
+    }
+
+    /// Reconnect the peripheral saved on last successful connect. Uses
+    /// retrievePeripherals (no scan needed — we already have its identifier).
+    /// The connect is left pending (no timeout) so it completes whenever the
+    /// wearable is next in range.
+    private func attemptAutoReconnect() {
+        guard connectedPeripheral == nil,
+              let idString = try? keychainService.read(.blePeripheralID),
+              let uuid = UUID(uuidString: idString),
+              let peripheral = centralManager.retrievePeripherals(withIdentifiers: [uuid]).first
+        else { return }
+
+        peripheral.delegate = self
+        pairingState = .connecting(
+            DiscoveredDevice(id: peripheral.identifier,
+                             name: peripheral.name ?? pairedDeviceName ?? "Device",
+                             rssi: -60, peripheral: peripheral)
+        )
+        centralManager.connect(peripheral, options: nil)
+    }
+
+    /// iOS relaunched us in the background and handed back the live central.
+    /// Reattach as the peripheral's delegate so notifications keep flowing;
+    /// service/characteristic discovery from the prior session is preserved.
+    nonisolated func centralManager(
+        _ central: CBCentralManager,
+        willRestoreState dict: [String: Any]
+    ) {
+        let restored = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral]
+        Task { @MainActor in
+            guard let peripheral = restored?.first else { return }
+            self.didAttemptLaunchReconnect = true  // restoration supersedes launch reconnect
+            peripheral.delegate      = self
+            self.connectedPeripheral = peripheral
+            self.recomputeSource()
+            if peripheral.state == .connected {
+                self.isStreaming = true
+                self.pairingState = .syncing(
+                    DiscoveredDevice(id: peripheral.identifier,
+                                     name: peripheral.name ?? "Device",
+                                     rssi: -60, peripheral: peripheral)
+                )
             }
         }
     }
@@ -589,8 +712,12 @@ extension DevicePairingService: CBCentralManagerDelegate {
         didConnect peripheral: CBPeripheral
     ) {
         Task { @MainActor in
+            self.cancelConnectTimeout()
             self.deactivateFitbit()  // BLE wearable takes over — pause Fitbit (keep token)
             self.connectedPeripheral = peripheral
+            // Remember this peripheral for auto-reconnect on next launch and to
+            // mark an unexpected drop (vs a user-initiated disconnect).
+            try? self.keychainService.save(peripheral.identifier.uuidString, for: .blePeripheralID)
             self.recomputeSource()   // BLE now owns the vitals stream, overriding HealthKit
             peripheral.delegate      = self
             let device = self.discoveredDevices[peripheral.identifier]
@@ -608,12 +735,8 @@ extension DevicePairingService: CBCentralManagerDelegate {
                 deviceName: device.name
             )
 
-            // Discover BLE services
-            peripheral.discoverServices([
-                CardioAIBLEService.primaryService,
-                CardioAIBLEService.bloodPressure,
-                CardioAIBLEService.pulseOximeter,
-            ])
+            // Discover only the services we can decode (see supportedServices).
+            peripheral.discoverServices(CardioAIBLEService.supportedServices)
         }
     }
 
@@ -625,7 +748,23 @@ extension DevicePairingService: CBCentralManagerDelegate {
         Task { @MainActor in
             self.isStreaming         = false
             self.connectedPeripheral = nil
-            self.pairingState        = .idle
+
+            // If the stored peripheral id is still present, this drop was
+            // accidental (out of range, interference) — not a user disconnect,
+            // which deletes the id first. Ask CoreBluetooth to reconnect the
+            // moment the wearable is back in range instead of forcing a re-scan.
+            if self.keychainService.exists(.blePeripheralID) {
+                self.pairingState = .connecting(
+                    self.discoveredDevices[peripheral.identifier]
+                    ?? DiscoveredDevice(id: peripheral.identifier,
+                                        name: peripheral.name ?? "Device",
+                                        rssi: -60, peripheral: peripheral)
+                )
+                peripheral.delegate = self
+                central.connect(peripheral, options: nil)  // pending until back in range
+            } else {
+                self.pairingState = .idle
+            }
             self.recomputeSource()   // BLE dropped — revert to HealthKit (if observing) or none
         }
     }
@@ -636,6 +775,7 @@ extension DevicePairingService: CBCentralManagerDelegate {
         error: Error?
     ) {
         Task { @MainActor in
+            self.cancelConnectTimeout()
             self.pairingState = .failed(error?.localizedDescription ?? "Failed to connect to device")
         }
     }
