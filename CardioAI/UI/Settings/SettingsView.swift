@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var showSignOutConfirm     = false
     @State private var showDisconnectConfirm  = false
     @State private var showManageSubscription = false
+    @State private var showRefundSheet        = false
     @State private var showDeleteConfirm      = false
     @State private var isDeleting             = false
     @State private var deleteError: String?
@@ -59,12 +60,27 @@ struct SettingsView: View {
                     SettingsGroup(title: "Plan & Billing") {
                         SettingsRow(
                             label: "Current plan",
-                            value: subscriptionManager.isSubscribed ? "CardioAI Live Premium" : "No active plan",
+                            value: subscriptionManager.isSubscribed ? "CardioAI Live RPM Premium" : "No active plan",
                             valueColor: subscriptionManager.isSubscribed ? ColorPalette.cardioGreen : ColorPalette.inkMute
                         )
                         if subscriptionManager.isSubscribed, let product = subscriptionManager.product {
                             SettingsDivider()
                             SettingsRow(label: "Price", value: "\(product.displayPrice) / month")
+                        }
+                        if subscriptionManager.isSubscribed, let renewalDate = subscriptionManager.renewalDate {
+                            SettingsDivider()
+                            SettingsRow(
+                                label: subscriptionManager.willAutoRenew ? "Renews" : "Ends",
+                                value: renewalDate.formatted(date: .abbreviated, time: .omitted)
+                            )
+                            if !subscriptionManager.willAutoRenew {
+                                SettingsDivider()
+                                Text("Auto-renewal is off. You'll keep access until the date above, then it ends.")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(ColorPalette.inkSoft)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.vertical, 13)
+                            }
                         }
                         SettingsDivider()
                         // Apple does not allow cancelling or changing a
@@ -73,6 +89,21 @@ struct SettingsView: View {
                         // subscription manager.
                         SettingsButtonRow(title: "Manage Subscription", tint: ColorPalette.brandBlue) {
                             showManageSubscription = true
+                        }
+                        if subscriptionManager.isSubscribed {
+                            SettingsDivider()
+                            SettingsButtonRow(title: "Request a Refund", tint: ColorPalette.brandBlue) {
+                                showRefundSheet = true
+                            }
+                            SettingsDivider()
+                            // Apple, not the app, issues App Store refunds — this
+                            // only opens their official request form. Stated so
+                            // users don't expect the app itself to grant it.
+                            Text("Refunds are reviewed and issued by Apple, not CardioAI. This opens Apple's official request form; Apple makes the final decision.")
+                                .font(.system(size: 12))
+                                .foregroundStyle(ColorPalette.inkSoft)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 13)
                         }
                         SettingsDivider()
                         SettingsButtonRow(title: isRestoring ? "Restoring…" : "Restore Purchases",
@@ -226,6 +257,8 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) { }
             }
             .manageSubscriptionsSheet(isPresented: $showManageSubscription)
+            .refundRequestSheet(for: subscriptionManager.refundTransactionID ?? 0,
+                                isPresented: $showRefundSheet)
             // Transaction.updates does NOT fire when a user cancels — a
             // cancelled subscription stays entitled until the period ends, so
             // there is no transaction to observe. Without this refresh,
@@ -263,9 +296,9 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) { }
             } message: {
                 if subscriptionManager.willAutoRenew {
-                    Text("Your subscription is set to renew. Deleting your account does not stop billing — only you can cancel it, in the App Store. We recommend cancelling first. Deleting is permanent and removes all cardiac data.")
+                    Text("Your subscription is set to renew. Deleting your account does not stop billing — only you can cancel it, in the App Store. We recommend cancelling first. Deleting permanently removes your login, name, and profile; your vitals history and clinical alerts are retained as part of your medical record.")
                 } else {
-                    Text("This permanently deletes your account and all cardiac data. It cannot be undone.")
+                    Text("This permanently deletes your login, name, and profile. Your vitals history and clinical alerts are retained as part of your medical record. This cannot be undone.")
                 }
             }
         }

@@ -10,6 +10,9 @@ struct PaywallView: View {
     @EnvironmentObject var subscriptionManager: SubscriptionManager
     @EnvironmentObject var authService: AuthService
     @State private var isPurchasing = false
+    @State private var isRestoring = false
+    @State private var restoreMessage: String?
+    @State private var restoreSucceeded = false
 
     var body: some View {
         ZStack {
@@ -34,11 +37,26 @@ struct PaywallView: View {
 
                     subscribeButton
 
-                    Button("Restore Purchases") {
-                        Task { await subscriptionManager.restorePurchases() }
+                    Button {
+                        restorePurchases()
+                    } label: {
+                        if isRestoring {
+                            ProgressView().tint(ColorPalette.brandBlue)
+                        } else {
+                            Text("Restore Purchases")
+                        }
                     }
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(ColorPalette.brandBlue)
+                    .disabled(isRestoring)
+
+                    if let restoreMessage {
+                        Text(restoreMessage)
+                            .font(.system(size: 12))
+                            .foregroundStyle(restoreSucceeded ? ColorPalette.cardioGreen : ColorPalette.inkSoft)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    }
 
                     HStack(spacing: 16) {
                         Link("Terms of Use", destination: URL(string: "https://cardioailive.com/terms")!)
@@ -60,6 +78,32 @@ struct PaywallView: View {
         }
     }
 
+    // MARK: - Actions
+
+    private func restorePurchases() {
+        isRestoring    = true
+        restoreMessage = nil
+        // Cleared up front: a stale purchaseError from an earlier failed
+        // subscribe would otherwise be misreported as this restore failing.
+        subscriptionManager.purchaseError = nil
+        Task {
+            await subscriptionManager.restorePurchases()
+            if let error = subscriptionManager.purchaseError {
+                restoreSucceeded = false
+                restoreMessage   = error
+            } else {
+                // AppStore.sync() succeeding only means the lookup ran, not
+                // that anything was found — the entitlement state after the
+                // refresh is what actually answers the user.
+                restoreSucceeded = subscriptionManager.isSubscribed
+                restoreMessage   = subscriptionManager.isSubscribed
+                    ? "Subscription restored."
+                    : "No active subscription found for this Apple ID."
+            }
+            isRestoring = false
+        }
+    }
+
     // MARK: - Sections
 
     private var header: some View {
@@ -70,7 +114,7 @@ struct PaywallView: View {
                       size: 64, corner: 18, iconSize: 30)
                 .padding(.top, 24)
 
-            Text("CardioAI Live Premium")
+            Text("CardioAI Live RPM Premium")
                 .font(.system(size: 22, weight: .bold))
                 .tracking(-0.3)
                 .foregroundStyle(ColorPalette.ink)
@@ -85,7 +129,7 @@ struct PaywallView: View {
 
     private var featureCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            FeatureRow(text: "Pair unlimited BLE, Apple Watch, and Fitbit devices")
+            FeatureRow(text: "Pair unlimited BLE and Apple Watch devices")
             FeatureRow(text: "Real-time 7-agent clinical AI analysis")
             FeatureRow(text: "Direct alerts to your care team")
             FeatureRow(text: "Full vitals history and reports")

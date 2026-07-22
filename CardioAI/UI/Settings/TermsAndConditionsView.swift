@@ -1,19 +1,18 @@
 // TermsAndConditionsView.swift
-// In-app Terms & Conditions. Body copy is a placeholder until Legal supplies
-// the real text.
+// In-app Terms & Conditions. Loads the hosted terms page.
 
 import SwiftUI
 
 struct TermsAndConditionsView: View {
+    private let url = URL(string: "https://cardioailiverpm.com/terms")!
+    @State private var isLoading = true
+
     var body: some View {
-        ScrollView {
-            Text("need to update")
-                .font(.system(size: 14))
-                .foregroundStyle(ColorPalette.inkSoft)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(18)
-                .designCard(cornerRadius: 20)
-                .padding(16)
+        ZStack {
+            LegalWebView(url: url, isLoading: $isLoading)
+            if isLoading {
+                ProgressView()
+            }
         }
         .background(ColorPalette.screenBackground.ignoresSafeArea())
         .navigationTitle("Terms & Conditions")

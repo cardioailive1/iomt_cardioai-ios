@@ -22,9 +22,12 @@
 
 import Foundation
 import StoreKit
+import os.log
+
+private let log = Logger(subsystem: "com.cardioai.iomt", category: "SubscriptionManager")
 
 enum SubscriptionProductID {
-    static let monthly = "com.cardioailive.rpm.premium.monthly"
+    static let monthly = "com.W9464NC4J7.CardioAI.RPM"
 }
 
 @MainActor
@@ -41,11 +44,22 @@ final class SubscriptionManager: ObservableObject {
     /// Anything asking "have they stopped their billing?" must read this,
     /// not `isSubscribed`.
     @Published private(set) var willAutoRenew: Bool = false
+
+    /// Next-charge date if auto-renewing, or access-end date if cancelled.
+    /// Taken from the active transaction's `expirationDate`. nil when not
+    /// subscribed.
+    @Published private(set) var renewalDate: Date?
+
+    /// StoreKit transaction id of the current entitlement, needed by the
+    /// native `.refundRequestSheet(for:isPresented:)`. nil when not subscribed.
+    @Published private(set) var refundTransactionID: UInt64?
     @Published var purchaseError: String?
 
     private var updateListenerTask: Task<Void, Never>?
+    private let apiClient: APIClient
 
-    init() {
+    init(apiClient: APIClient) {
+        self.apiClient = apiClient
         updateListenerTask = listenForTransactionUpdates()
         Task {
             await loadProduct()
@@ -117,6 +131,7 @@ final class SubscriptionManager: ObservableObject {
                 let transaction = try checkVerified(verification)
                 await transaction.finish()
                 await refreshEntitlementStatus()
+                await linkSubscriptionToBackend(transaction: transaction)
             case .userCancelled:
                 break
             case .pending:
@@ -133,22 +148,58 @@ final class SubscriptionManager: ObservableObject {
         do {
             try await AppStore.sync()
             await refreshEntitlementStatus()
+            if let transaction = await currentSubscriptionTransaction() {
+                await linkSubscriptionToBackend(transaction: transaction)
+            }
         } catch {
             purchaseError = "Restore failed: \(error.localizedDescription)"
         }
+    }
+
+    /// Tells the backend which store transaction belongs to the signed-in
+    /// user. Best-effort: if it fails (e.g. no network right after purchase),
+    /// the app UI is still unlocked via the local StoreKit 2 entitlement
+    /// check — this only affects server-side enforcement, which retries next
+    /// time this runs.
+    private func linkSubscriptionToBackend(transaction: Transaction) async {
+        do {
+            _ = try await apiClient.linkSubscription(
+                platform: "apple",
+                transactionId: String(transaction.originalID),
+                productId: transaction.productID
+            )
+        } catch {
+            log.warning("[Subscription] failed to link subscription to backend: \(error.localizedDescription)")
+        }
+    }
+
+    private func currentSubscriptionTransaction() async -> Transaction? {
+        for await result in Transaction.currentEntitlements {
+            guard let transaction = try? checkVerified(result) else { continue }
+            if transaction.productID == SubscriptionProductID.monthly {
+                return transaction
+            }
+        }
+        return nil
     }
 
     // MARK: - Entitlement checking
 
     func refreshEntitlementStatus() async {
         var hasActiveSubscription = false
+        var expiration: Date?
+        var transactionID: UInt64?
         for await result in Transaction.currentEntitlements {
             guard let transaction = try? checkVerified(result) else { continue }
             if transaction.productID == SubscriptionProductID.monthly {
                 hasActiveSubscription = true
+                expiration = transaction.expirationDate
+                transactionID = transaction.id
             }
         }
         isSubscribed = hasActiveSubscription
+        renewalDate = expiration
+        refundTransactionID = transactionID
         await refreshRenewalStatus()
     }
 

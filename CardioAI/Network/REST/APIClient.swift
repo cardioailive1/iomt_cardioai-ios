@@ -208,14 +208,31 @@ final class APIClient {
                                  useAuthSession: true)
     }
 
-    /// DELETE /auth/account — permanent account deletion. Required by App
+    /// DELETE /account — permanent account deletion. Required by App
     /// Store Review Guideline 5.1.1(v) for any app that lets users create an
     /// account. Deleting the account does NOT cancel an App Store
     /// subscription — only the user can do that in Settings, which is why the
     /// UI sends them to the manage-subscriptions sheet first.
-    func deleteAccount() async throws -> EmptyResponse {
-        return try await request("DELETE", path: "auth/account",
+    ///
+    /// Credentials/profile are wiped unconditionally, but clinical data tied
+    /// to this patient_id (vitals history, alerts) is RETAINED for
+    /// medical-record retention — not silently deleted.
+    /// AccountDeletionResponse.clinicalDataNote carries that explanation back
+    /// so the UI tells the user exactly what "deleted" does and doesn't mean.
+    func deleteAccount() async throws -> AccountDeletionResponse {
+        return try await request("DELETE", path: "account",
                                  useAuthSession: true)
+    }
+
+    /// POST /subscription/link — tells the backend which store transaction
+    /// belongs to the signed-in user, right after a client-confirmed purchase.
+    /// Without this, Apple's webhook notifications (which identify purchases by
+    /// transaction ID, not by our internal user_id) have no way to know whose
+    /// subscription status to update.
+    func linkSubscription(platform: String, transactionId: String, productId: String) async throws -> EmptyResponse {
+        return try await request("POST", path: "subscription/link", body: [
+            "platform": platform, "transaction_id": transactionId, "product_id": productId,
+        ], useAuthSession: true)
     }
 
     // MARK: - Device endpoints
@@ -246,6 +263,16 @@ final class APIClient {
 // MARK: - Response models
 
 struct EmptyResponse: Decodable {}
+
+struct AccountDeletionResponse: Decodable {
+    let message: String
+    let clinicalDataNote: String
+
+    enum CodingKeys: String, CodingKey {
+        case message
+        case clinicalDataNote = "clinical_data_note"
+    }
+}
 
 struct DeviceRegistrationResponse: Decodable {
     let deviceId:  String

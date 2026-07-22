@@ -52,6 +52,6 @@ final class DependencyContainer: ObservableObject {
             healthKitService: healthKitService,
             fitbitService:    fitbitService
         )
-        subscriptionManager  = SubscriptionManager()
+        subscriptionManager  = SubscriptionManager(apiClient: apiClient)
     }
 }
