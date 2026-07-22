@@ -266,14 +266,12 @@ final class GoogleHealthService: NSObject, ObservableObject {
     private func pollLatestHeartRate(onSample: ((GoogleHealthReading) -> Void)?) async {
         guard var accessToken = try? keychainService.read(.fitbitAccessToken) else { return }
 
-        // Google Health API: GET /v4/users/me/dataTypes/{type}/dataPoints
-        // "heartRate" matches this API's camelCase data type naming
-        // (consistent with other documented types like "bloodGlucose",
-        // "heartRateVariability"). Verify against Google's live schema
-        // (ghealth schema type heart-rate, or the API docs) if this ever
-        // 404s — the exact type slug is one of the few things Google's own
-        // docs flag as still subject to change pre-stabilization.
-        guard var url = URL(string: "\(apiBaseURL)/users/me/dataTypes/heartRate/dataPoints") else { return }
+        // Google Health API: GET /v4/users/me/dataTypes/{slug}/dataPoints.
+        // Slugs are kebab-case per Google's published data-type table
+        // (heart-rate, blood-glucose, active-energy-burned, …) — an earlier
+        // "camelCase" assumption (heartRate) was wrong and 404s. JSON *fields*
+        // inside a point are still camelCase (heartRate.beatsPerMinute).
+        guard var url = URL(string: "\(apiBaseURL)/users/me/dataTypes/heart-rate/dataPoints") else { return }
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "page_size", value: "10")]
         url = components.url!
@@ -322,13 +320,165 @@ final class GoogleHealthService: NSObject, ObservableObject {
         //                     "dataSource": {...},
         //                     "sampleTime" or similar timestamp field } ] }
         if let points = json["dataPoints"] as? [[String: Any]], let latest = points.last {
-            if let hr = latest["heartRate"] as? [String: Any],
-               let bpmValue = hr["beatsPerMinute"] {
-                let bpm = (bpmValue as? Double) ?? Double("\(bpmValue)") ?? 0
-                return GoogleHealthReading(bpm: bpm, timestamp: Date())
-            }
+            let bpm = firstNumeric(in: latest, keys: ["beatsPerMinute", "bpm", "value"])
+            if bpm > 0 { return GoogleHealthReading(bpm: bpm, timestamp: Date()) }
         }
         return nil
+    }
+
+    // MARK: - Fitness + aux vitals (Fitbit source)
+    //
+    // dataType slugs are kebab-case per Google's published Health API spec
+    // (developers.google.com/health/migration/api-specifications): steps,
+    // active-energy-burned, exercise, oxygen-saturation. JSON value fields:
+    // steps→{steps:{count}}, active-energy-burned→{kcal}, oxygen-saturation→
+    // %, exercise→documented shape (see parseWorkouts). Parsing stays tolerant
+    // (depth-first numeric scan). Note: Google Health has NO blood-pressure
+    // dataType (Fitbit devices don't measure BP), so BP is never fetched here.
+    // ponytail: verify against a live Fitbit account — Google flags response
+    // shapes pre-stabilization, and some types may need a broader OAuth scope.
+
+    /// Today's step count from Google Health, or 0 if unavailable.
+    func fetchTodaySteps() async -> Double {
+        let points = await fetchDataPoints(dataType: "steps")
+        return points.reduce(0) { $0 + Self.firstNumeric(in: $1, keys: ["countSum", "count", "steps", "value"]) }
+    }
+
+    /// Today's active energy (kcal) from Google Health, or 0 if unavailable.
+    func fetchTodayActiveEnergy() async -> Double {
+        let points = await fetchDataPoints(dataType: "active-energy-burned")
+        return points.reduce(0) { $0 + Self.firstNumeric(in: $1, keys: ["kcal", "kilocalories", "calories", "value"]) }
+    }
+
+    /// Latest SpO2 reading (0–100), or nil if unavailable. Handles both
+    /// percentage (97) and fraction (0.97) representations.
+    func fetchLatestSpO2() async -> Double? {
+        let points = await fetchDataPoints(dataType: "oxygen-saturation")
+        guard let latest = points.last else { return nil }
+        let v = Self.firstNumeric(in: latest, keys: ["percentage", "oxygenSaturation", "spo2", "saturation", "value"])
+        guard v > 0 else { return nil }
+        return v <= 1 ? v * 100 : v
+    }
+
+    /// Best-effort trend: returns today's total keyed to today rather than
+    /// fabricating a 7-day shape, since the API's per-day time-window params
+    /// aren't verified. ponytail: wire real daily windows once confirmed.
+    func fetchStepsTrend(days: Int = 7) async -> [(date: Date, steps: Double)] {
+        let today = await fetchTodaySteps()
+        return [(Calendar.current.startOfDay(for: Date()), today)]
+    }
+
+    /// Recent Fitbit workouts via the Google Health `exercise` dataType, most
+    /// recent first. Fields per Google's published schema (interval.startTime/
+    /// endTime, exerciseType, displayName, activeDuration, metricsSummary.
+    /// caloriesKcal).
+    func fetchRecentWorkouts(limit: Int = 5) async -> [WorkoutSummary] {
+        let points = await fetchDataPoints(dataType: "exercise", pageSize: limit)
+        return Self.parseWorkouts(from: points, limit: limit)
+    }
+
+    /// Shared GET for `dataTypes/{slug}/dataPoints` — handles auth, one 401
+    /// refresh-and-retry, and returns the `dataPoints` array (empty on failure).
+    private func fetchDataPoints(dataType: String, pageSize: Int = 10) async -> [[String: Any]] {
+        guard var accessToken = try? keychainService.read(.fitbitAccessToken) else { return [] }
+        guard let base = URL(string: "\(apiBaseURL)/users/me/dataTypes/\(dataType)/dataPoints"),
+              var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else { return [] }
+        components.queryItems = [URLQueryItem(name: "page_size", value: "\(max(pageSize, 1))")]
+        guard let url = components.url else { return [] }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        do {
+            var (data, response) = try await URLSession.shared.data(for: request)
+            if let http = response as? HTTPURLResponse, http.statusCode == 401 {
+                try await refreshAccessToken()
+                guard let refreshed = try? keychainService.read(.fitbitAccessToken) else { return [] }
+                accessToken = refreshed
+                request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                (data, response) = try await URLSession.shared.data(for: request)
+            }
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                let body = String(data: data, encoding: .utf8) ?? "?"
+                logger_ios.warning("[GoogleHealth] \(dataType) fetch failed: \(body.prefix(200))")
+                return []
+            }
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let points = json["dataPoints"] as? [[String: Any]] else { return [] }
+            return points
+        } catch {
+            logger_ios.warning("[GoogleHealth] \(dataType) fetch error: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    private static func parseWorkouts(from points: [[String: Any]], limit: Int) -> [WorkoutSummary] {
+        let workouts: [WorkoutSummary] = points.compactMap { point in
+            // Documented shape: point.exercise.{ interval.{startTime,endTime},
+            // exerciseType, displayName, activeDuration ("1800s"),
+            // metricsSummary.caloriesKcal }.
+            let ex = (point["exercise"] as? [String: Any]) ?? point
+            let interval = ex["interval"] as? [String: Any]
+            guard let startDate = parseISODate(interval?["startTime"]) else { return nil }
+            let endDate = parseISODate(interval?["endTime"])
+            let duration = endDate.map { $0.timeIntervalSince(startDate) }
+                ?? parseSeconds(ex["activeDuration"])
+            // caloriesKcal lives under metricsSummary; firstNumeric recurses to it.
+            let kcal = firstNumeric(in: ex, keys: ["caloriesKcal", "kcal", "kilocalories", "calories"])
+            let type = (ex["displayName"] as? String)
+                ?? prettifyType(ex["exerciseType"] as? String)
+                ?? "Workout"
+            return WorkoutSummary(
+                activityType: type,
+                startDate: startDate,
+                durationSeconds: max(duration, 0),
+                activeEnergyKcal: kcal > 0 ? kcal : nil
+            )
+        }
+        return Array(workouts.sorted { $0.startDate > $1.startDate }.prefix(limit))
+    }
+
+    /// Parse an RFC3339 / ISO-8601 timestamp (with or without fractional secs).
+    private static func parseISODate(_ value: Any?) -> Date? {
+        guard let s = value as? String else { return nil }
+        let withFrac = ISO8601DateFormatter()
+        withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return withFrac.date(from: s) ?? ISO8601DateFormatter().date(from: s)
+    }
+
+    /// Parse a seconds string like "1800s" (the exercise activeDuration format).
+    private static func parseSeconds(_ value: Any?) -> Double {
+        guard let s = value as? String else { return 0 }
+        return Double(s.filter { $0.isNumber || $0 == "." }) ?? 0
+    }
+
+    /// "RUNNING" / "TRADITIONAL_STRENGTH_TRAINING" → "Running" / "Traditional Strength Training".
+    private static func prettifyType(_ raw: String?) -> String? {
+        guard let raw, !raw.isEmpty else { return nil }
+        return raw.split(separator: "_")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() }
+            .joined(separator: " ")
+    }
+
+    /// Depth-first search for the first value under one of `keys` that reads as
+    /// a number, descending into nested dictionaries (the metric value is often
+    /// wrapped, e.g. { "steps": { "count": 512 } }).
+    private static func firstNumeric(in dict: [String: Any], keys: [String]) -> Double {
+        for key in keys {
+            if let v = dict[key] {
+                if let d = v as? Double { return d }
+                if let i = v as? Int { return Double(i) }
+                if let s = v as? String, let d = Double(s) { return d }
+            }
+        }
+        for value in dict.values {
+            if let nested = value as? [String: Any] {
+                let found = firstNumeric(in: nested, keys: keys)
+                if found != 0 { return found }
+            }
+        }
+        return 0
     }
 
     // MARK: - PKCE helpers

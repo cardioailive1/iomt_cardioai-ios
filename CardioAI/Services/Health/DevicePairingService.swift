@@ -275,16 +275,42 @@ final class DevicePairingService: NSObject, ObservableObject {
             guard let self else { return }
             Task { @MainActor in
                 guard self.activeVitalsSource == .healthKit else { return }  // BLE owns the stream
+                await self.refreshAuxVitalsIfStale()
+                var vitals: [String: Double] = ["heart_rate": bpm]
+                if let spo2 = self.auxSpO2 { vitals["spo2"] = spo2 }
+                if let sys = self.auxSystolic, let dia = self.auxDiastolic {
+                    vitals["systolic"] = sys
+                    vitals["diastolic"] = dia
+                }
                 let reading = DeviceReading(
                     deviceID:    deviceID,
                     deviceType:  "activity_tracker",
-                    vitals:      ["heart_rate": bpm],
+                    vitals:      vitals,
                     qualityScore: 0.9,
                     timestamp:   date
                 )
                 self.pushReadingToBackend(reading)
             }
         }
+    }
+
+    // Latest SpO2 / blood pressure from HealthKit, refreshed at most once a
+    // minute and attached to each heart-rate frame — SpO2/BP change slowly and
+    // aren't streamed like HR, so re-fetching per HR sample would be wasteful.
+    private var auxSpO2:      Double?
+    private var auxSystolic:  Double?
+    private var auxDiastolic: Double?
+    private var auxVitalsAt:  Date = .distantPast
+
+    private func refreshAuxVitalsIfStale() async {
+        guard Date().timeIntervalSince(auxVitalsAt) > 60 else { return }
+        auxVitalsAt = Date()
+        async let spo2 = healthKitService.fetchLatestSpO2()
+        async let bp   = healthKitService.fetchLatestBloodPressure()
+        auxSpO2 = await spo2
+        let pressure = await bp
+        auxSystolic  = pressure?.systolic
+        auxDiastolic = pressure?.diastolic
     }
 
     /// Ask for HealthKit access once, right after login. First run shows the
@@ -299,6 +325,56 @@ final class DevicePairingService: NSObject, ObservableObject {
             startHealthKitObservation()
             recomputeSource()
         }
+    }
+
+    // MARK: - Fitness data (source-aware, read-only wellness — Activity section)
+    //
+    // Mirrors vitals source arbitration: when Fitbit (GoogleHealth) owns the
+    // stream, fitness (steps, energy, trend, workouts) comes from there;
+    // otherwise HealthKit — which covers both Apple Watch (it writes into
+    // HealthKit) and the iPhone's own step counter.
+
+    /// True if the active fitness source can return data (HealthKit access was
+    /// requested, or Fitbit is connected).
+    var fitnessSourceReady: Bool {
+        activeVitalsSource == .fitbit ? fitbitConnected : healthKitService.authorizationRequested
+    }
+
+    /// Steps + active energy for today, from whichever source owns vitals.
+    func fetchActivitySummary() async -> (steps: Double, activeEnergy: Double) {
+        if activeVitalsSource == .fitbit {
+            async let s = fitbitService.fetchTodaySteps()
+            async let e = fitbitService.fetchTodayActiveEnergy()
+            return (await s, await e)
+        }
+        async let s = healthKitService.fetchTodaySteps()
+        async let e = healthKitService.fetchTodayActiveEnergy()
+        return (await s, await e)
+    }
+
+    /// Daily step trend (oldest first) from the active source.
+    func fetchStepsTrend(days: Int = 7) async -> [(date: Date, steps: Double)] {
+        if activeVitalsSource == .fitbit {
+            return await fitbitService.fetchStepsTrend(days: days)
+        }
+        return await healthKitService.fetchStepsTrend(days: days)
+    }
+
+    /// Recent workouts from the active source: Fitbit via the Google Health
+    /// `exercise` dataType, otherwise HealthKit.
+    func fetchRecentWorkouts(limit: Int = 5) async -> [WorkoutSummary] {
+        if activeVitalsSource == .fitbit {
+            return await fitbitService.fetchRecentWorkouts(limit: limit)
+        }
+        return await healthKitService.fetchRecentWorkouts(limit: limit)
+    }
+
+    /// Prompt for HealthKit read access if not yet requested — lets an existing
+    /// user grant the newly-added step/energy/workout read types. No-op for the
+    /// Fitbit source (its access is the OAuth token).
+    func ensureFitnessAuthorization() async {
+        guard activeVitalsSource != .fitbit else { return }
+        await healthKitService.requestAuthorization()
     }
 
     // MARK: - Apple Watch detection (WatchConnectivity)
@@ -540,10 +616,13 @@ final class DevicePairingService: NSObject, ObservableObject {
             guard let self else { return }
             Task { @MainActor in
                 guard self.activeVitalsSource == .fitbit else { return }  // another source took over
+                var vitals: [String: Double] = ["heart_rate": sample.bpm]
+                // Fitbit devices report SpO2 (no BP) — attach if available.
+                if let spo2 = await self.fitbitService.fetchLatestSpO2() { vitals["spo2"] = spo2 }
                 let reading = DeviceReading(
                     deviceID:    deviceID,
                     deviceType:  "activity_tracker",
-                    vitals:      ["heart_rate": sample.bpm],
+                    vitals:      vitals,
                     qualityScore: 0.85,  // polled, not real-time — slightly lower confidence
                     timestamp:   sample.timestamp
                 )

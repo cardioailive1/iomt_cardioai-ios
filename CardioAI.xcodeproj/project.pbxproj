@@ -12,32 +12,32 @@
 		AA000001 /* CardioAIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100001 /* CardioAIApp.swift */; };
 		AA000002 /* DependencyContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100002 /* DependencyContainer.swift */; };
 		AA000003 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100003 /* AppConfiguration.swift */; };
-		AA000004 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100004 /* KeychainService.swift */; };
+		AA000004 /* Keychain/KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100004 /* Keychain/KeychainService.swift */; };
 		AA000005 /* HMACSecurityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100005 /* HMACSecurityManager.swift */; };
-		AA000006 /* Protocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100006 /* Protocol.swift */; };
-		AA000007 /* BridgeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100007 /* BridgeClient.swift */; };
-		AA000008 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100008 /* APIClient.swift */; };
+		AA000006 /* Protocol/Protocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100006 /* Protocol/Protocol.swift */; };
+		AA000007 /* WebSocket/BridgeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100007 /* WebSocket/BridgeClient.swift */; };
+		AA000008 /* REST/APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100008 /* REST/APIClient.swift */; };
 		AA000009 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100009 /* Models.swift */; };
 		AA000010 /* Stores.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100010 /* Stores.swift */; };
 		AA000011 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100011 /* RootView.swift */; };
 		AA000012 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100012 /* MainTabView.swift */; };
-		AA000013 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100013 /* DashboardView.swift */; };
-		AA000014 /* AlertsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100014 /* AlertsView.swift */; };
-		AA000015 /* DevicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100015 /* DevicesView.swift */; };
-		AA0000A1 /* TermsAndConditionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000A1 /* TermsAndConditionsView.swift */; };
-		AA0000A2 /* PrivacyPolicyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000A2 /* PrivacyPolicyView.swift */; };
-		AA000016 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100016 /* SettingsView.swift */; };
-		AA000017 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100017 /* NotificationService.swift */; };
-		AA000018 /* HealthKitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100018 /* HealthKitService.swift */; };
+		AA000013 /* Dashboard/DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100013 /* Dashboard/DashboardView.swift */; };
+		AA000014 /* Alerts/AlertsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100014 /* Alerts/AlertsView.swift */; };
+		AA000015 /* Devices/DevicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100015 /* Devices/DevicesView.swift */; };
+		AA000016 /* Settings/SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100016 /* Settings/SettingsView.swift */; };
+		AA000017 /* Notifications/NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100017 /* Notifications/NotificationService.swift */; };
+		AA000018 /* Health/HealthKitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100018 /* Health/HealthKitService.swift */; };
 		AA000019 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100019 /* AuthService.swift */; };
-		AA000020 /* DevicePairingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100020 /* DevicePairingService.swift */; };
-		AA000021 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100021 /* SignInView.swift */; };
-		AA000022 /* DevicePairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100022 /* DevicePairingView.swift */; };
+		AA000020 /* Health/DevicePairingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100020 /* Health/DevicePairingService.swift */; };
+		AA000021 /* Auth/SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100021 /* Auth/SignInView.swift */; };
+		AA000022 /* DevicePairing/DevicePairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100022 /* DevicePairing/DevicePairingView.swift */; };
 		AA000030 /* CardioAITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100030 /* CardioAITests.swift */; };
-		AA000031 /* VitalsDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100031 /* VitalsDetailView.swift */; };
+		AA000031 /* Vitals/VitalsDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100031 /* Vitals/VitalsDetailView.swift */; };
 		AA000040 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100040 /* Theme.swift */; };
-		AA000041 /* GoogleHealthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100041 /* GoogleHealthService.swift */; };
-		AA000042 /* KnownBLEDevices.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100042 /* KnownBLEDevices.swift */; };
+		AA000041 /* Health/GoogleHealthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100041 /* Health/GoogleHealthService.swift */; };
+		AA000042 /* Health/KnownBLEDevices.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100042 /* Health/KnownBLEDevices.swift */; };
+		AA0000A1 /* Settings/TermsAndConditionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000A1 /* Settings/TermsAndConditionsView.swift */; };
+		AA0000A2 /* Settings/PrivacyPolicyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000A2 /* Settings/PrivacyPolicyView.swift */; };
 		ADFCD713F984A4401B2FB09D /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E5EBBB7ED8CBB2270BCDD3F /* PaywallView.swift */; };
 		BC4A3B0AE93600A4D2D3185E /* Products.storekit in Resources */ = {isa = PBXBuildFile; fileRef = B5301487B3F6795F2B4287A9 /* Products.storekit */; };
 /* End PBXBuildFile section */
@@ -54,42 +54,42 @@
 
 /* Begin PBXFileReference section */
 		1E95CB352FED8A0E00868C94 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		2E5EBBB7ED8CBB2270BCDD3F /* PaywallView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PaywallView.swift; path = PaywallView.swift; sourceTree = "<group>"; };
+		2E5EBBB7ED8CBB2270BCDD3F /* PaywallView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
 		AA100001 /* CardioAIApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardioAIApp.swift; sourceTree = "<group>"; };
 		AA100002 /* DependencyContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DependencyContainer.swift; sourceTree = "<group>"; };
 		AA100003 /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
-		AA100004 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain/KeychainService.swift; sourceTree = "<group>"; };
+		AA100004 /* Keychain/KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain/KeychainService.swift; sourceTree = "<group>"; };
 		AA100005 /* HMACSecurityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HMACSecurityManager.swift; sourceTree = "<group>"; };
-		AA100006 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Protocol/Protocol.swift; sourceTree = "<group>"; };
-		AA100007 /* BridgeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocket/BridgeClient.swift; sourceTree = "<group>"; };
-		AA100008 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = REST/APIClient.swift; sourceTree = "<group>"; };
+		AA100006 /* Protocol/Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Protocol/Protocol.swift; sourceTree = "<group>"; };
+		AA100007 /* WebSocket/BridgeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocket/BridgeClient.swift; sourceTree = "<group>"; };
+		AA100008 /* REST/APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = REST/APIClient.swift; sourceTree = "<group>"; };
 		AA100009 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		AA100010 /* Stores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stores.swift; sourceTree = "<group>"; };
 		AA100011 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		AA100012 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
-		AA100013 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dashboard/DashboardView.swift; sourceTree = "<group>"; };
-		AA100014 /* AlertsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Alerts/AlertsView.swift; sourceTree = "<group>"; };
-		AA100015 /* DevicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Devices/DevicesView.swift; sourceTree = "<group>"; };
-		AA1000A1 /* TermsAndConditionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings/TermsAndConditionsView.swift; sourceTree = "<group>"; };
-		AA1000A2 /* PrivacyPolicyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings/PrivacyPolicyView.swift; sourceTree = "<group>"; };
-		AA100016 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings/SettingsView.swift; sourceTree = "<group>"; };
-		AA100017 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications/NotificationService.swift; sourceTree = "<group>"; };
-		AA100018 /* HealthKitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/HealthKitService.swift; sourceTree = "<group>"; };
+		AA100013 /* Dashboard/DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dashboard/DashboardView.swift; sourceTree = "<group>"; };
+		AA100014 /* Alerts/AlertsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Alerts/AlertsView.swift; sourceTree = "<group>"; };
+		AA100015 /* Devices/DevicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Devices/DevicesView.swift; sourceTree = "<group>"; };
+		AA100016 /* Settings/SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings/SettingsView.swift; sourceTree = "<group>"; };
+		AA100017 /* Notifications/NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications/NotificationService.swift; sourceTree = "<group>"; };
+		AA100018 /* Health/HealthKitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/HealthKitService.swift; sourceTree = "<group>"; };
 		AA100019 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
-		AA100020 /* DevicePairingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/DevicePairingService.swift; sourceTree = "<group>"; };
-		AA100021 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth/SignInView.swift; sourceTree = "<group>"; };
-		AA100022 /* DevicePairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePairing/DevicePairingView.swift; sourceTree = "<group>"; };
+		AA100020 /* Health/DevicePairingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/DevicePairingService.swift; sourceTree = "<group>"; };
+		AA100021 /* Auth/SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth/SignInView.swift; sourceTree = "<group>"; };
+		AA100022 /* DevicePairing/DevicePairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePairing/DevicePairingView.swift; sourceTree = "<group>"; };
 		AA100030 /* CardioAITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardioAITests.swift; sourceTree = "<group>"; };
-		AA100031 /* VitalsDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Vitals/VitalsDetailView.swift; sourceTree = "<group>"; };
+		AA100031 /* Vitals/VitalsDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Vitals/VitalsDetailView.swift; sourceTree = "<group>"; };
 		AA100040 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
-		AA100041 /* GoogleHealthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/GoogleHealthService.swift; sourceTree = "<group>"; };
-		AA100042 /* KnownBLEDevices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/KnownBLEDevices.swift; sourceTree = "<group>"; };
+		AA100041 /* Health/GoogleHealthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/GoogleHealthService.swift; sourceTree = "<group>"; };
+		AA100042 /* Health/KnownBLEDevices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Health/KnownBLEDevices.swift; sourceTree = "<group>"; };
 		AA100098 /* CardioAI.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CardioAI.entitlements; sourceTree = "<group>"; };
 		AA100099 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AA1000A1 /* Settings/TermsAndConditionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings/TermsAndConditionsView.swift; sourceTree = "<group>"; };
+		AA1000A2 /* Settings/PrivacyPolicyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings/PrivacyPolicyView.swift; sourceTree = "<group>"; };
 		AA200001 /* CardioAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CardioAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA200002 /* CardioAITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CardioAITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		B5301487B3F6795F2B4287A9 /* Products.storekit */ = {isa = PBXFileReference; includeInIndex = 1; name = Products.storekit; path = Products.storekit; sourceTree = "<group>"; };
-		F82F2861D225D68E6D724FE4 /* SubscriptionManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SubscriptionManager.swift; path = SubscriptionManager.swift; sourceTree = "<group>"; };
+		B5301487B3F6795F2B4287A9 /* Products.storekit */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = Products.storekit; sourceTree = "<group>"; };
+		F82F2861D225D68E6D724FE4 /* SubscriptionManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SubscriptionManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -152,9 +152,9 @@
 		AA300012 /* Network */ = {
 			isa = PBXGroup;
 			children = (
-				AA100006 /* Protocol.swift */,
-				AA100007 /* BridgeClient.swift */,
-				AA100008 /* APIClient.swift */,
+				AA100006 /* Protocol/Protocol.swift */,
+				AA100007 /* WebSocket/BridgeClient.swift */,
+				AA100008 /* REST/APIClient.swift */,
 			);
 			path = Network;
 			sourceTree = "<group>";
@@ -180,15 +180,15 @@
 			children = (
 				AA100011 /* RootView.swift */,
 				AA100012 /* MainTabView.swift */,
-				AA100013 /* DashboardView.swift */,
-				AA100014 /* AlertsView.swift */,
-				AA100015 /* DevicesView.swift */,
-				AA100016 /* SettingsView.swift */,
-				AA1000A1 /* TermsAndConditionsView.swift */,
-				AA1000A2 /* PrivacyPolicyView.swift */,
-				AA100021 /* SignInView.swift */,
-				AA100022 /* DevicePairingView.swift */,
-				AA100031 /* VitalsDetailView.swift */,
+				AA100013 /* Dashboard/DashboardView.swift */,
+				AA100014 /* Alerts/AlertsView.swift */,
+				AA100015 /* Devices/DevicesView.swift */,
+				AA100016 /* Settings/SettingsView.swift */,
+				AA1000A1 /* Settings/TermsAndConditionsView.swift */,
+				AA1000A2 /* Settings/PrivacyPolicyView.swift */,
+				AA100021 /* Auth/SignInView.swift */,
+				AA100022 /* DevicePairing/DevicePairingView.swift */,
+				AA100031 /* Vitals/VitalsDetailView.swift */,
 				BBBEB32AB513040FDCA7B13E /* Paywall */,
 			);
 			path = UI;
@@ -197,12 +197,12 @@
 		AA300016 /* Services */ = {
 			isa = PBXGroup;
 			children = (
-				AA100004 /* KeychainService.swift */,
-				AA100017 /* NotificationService.swift */,
-				AA100018 /* HealthKitService.swift */,
-				AA100020 /* DevicePairingService.swift */,
-				AA100041 /* GoogleHealthService.swift */,
-				AA100042 /* KnownBLEDevices.swift */,
+				AA100004 /* Keychain/KeychainService.swift */,
+				AA100017 /* Notifications/NotificationService.swift */,
+				AA100018 /* Health/HealthKitService.swift */,
+				AA100020 /* Health/DevicePairingService.swift */,
+				AA100041 /* Health/GoogleHealthService.swift */,
+				AA100042 /* Health/KnownBLEDevices.swift */,
 				BDFD9D61A8B45823674CADF9 /* Subscription */,
 			);
 			path = Services;
@@ -247,7 +247,6 @@
 			children = (
 				2E5EBBB7ED8CBB2270BCDD3F /* PaywallView.swift */,
 			);
-			name = Paywall;
 			path = Paywall;
 			sourceTree = "<group>";
 		};
@@ -256,7 +255,6 @@
 			children = (
 				F82F2861D225D68E6D724FE4 /* SubscriptionManager.swift */,
 			);
-			name = Subscription;
 			path = Subscription;
 			sourceTree = "<group>";
 		};
@@ -354,30 +352,30 @@
 				AA000001 /* CardioAIApp.swift in Sources */,
 				AA000002 /* DependencyContainer.swift in Sources */,
 				AA000003 /* AppConfiguration.swift in Sources */,
-				AA000004 /* KeychainService.swift in Sources */,
+				AA000004 /* Keychain/KeychainService.swift in Sources */,
 				AA000005 /* HMACSecurityManager.swift in Sources */,
-				AA000006 /* Protocol.swift in Sources */,
-				AA000007 /* BridgeClient.swift in Sources */,
-				AA000008 /* APIClient.swift in Sources */,
+				AA000006 /* Protocol/Protocol.swift in Sources */,
+				AA000007 /* WebSocket/BridgeClient.swift in Sources */,
+				AA000008 /* REST/APIClient.swift in Sources */,
 				AA000009 /* Models.swift in Sources */,
 				AA000010 /* Stores.swift in Sources */,
 				AA000011 /* RootView.swift in Sources */,
 				AA000012 /* MainTabView.swift in Sources */,
-				AA000013 /* DashboardView.swift in Sources */,
-				AA000031 /* VitalsDetailView.swift in Sources */,
-				AA000014 /* AlertsView.swift in Sources */,
-				AA000015 /* DevicesView.swift in Sources */,
-				AA000016 /* SettingsView.swift in Sources */,
-				AA0000A1 /* TermsAndConditionsView.swift in Sources */,
-				AA0000A2 /* PrivacyPolicyView.swift in Sources */,
-				AA000017 /* NotificationService.swift in Sources */,
-				AA000018 /* HealthKitService.swift in Sources */,
+				AA000013 /* Dashboard/DashboardView.swift in Sources */,
+				AA000031 /* Vitals/VitalsDetailView.swift in Sources */,
+				AA000014 /* Alerts/AlertsView.swift in Sources */,
+				AA000015 /* Devices/DevicesView.swift in Sources */,
+				AA000016 /* Settings/SettingsView.swift in Sources */,
+				AA0000A1 /* Settings/TermsAndConditionsView.swift in Sources */,
+				AA0000A2 /* Settings/PrivacyPolicyView.swift in Sources */,
+				AA000017 /* Notifications/NotificationService.swift in Sources */,
+				AA000018 /* Health/HealthKitService.swift in Sources */,
 				AA000019 /* AuthService.swift in Sources */,
-				AA000020 /* DevicePairingService.swift in Sources */,
-				AA000041 /* GoogleHealthService.swift in Sources */,
-				AA000042 /* KnownBLEDevices.swift in Sources */,
-				AA000021 /* SignInView.swift in Sources */,
-				AA000022 /* DevicePairingView.swift in Sources */,
+				AA000020 /* Health/DevicePairingService.swift in Sources */,
+				AA000041 /* Health/GoogleHealthService.swift in Sources */,
+				AA000042 /* Health/KnownBLEDevices.swift in Sources */,
+				AA000021 /* Auth/SignInView.swift in Sources */,
+				AA000022 /* DevicePairing/DevicePairingView.swift in Sources */,
 				AA000040 /* Theme.swift in Sources */,
 				1FE1FEE1909AEE685BF25D89 /* SubscriptionManager.swift in Sources */,
 				ADFCD713F984A4401B2FB09D /* PaywallView.swift in Sources */,
@@ -418,7 +416,7 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_ENTITLEMENTS = CardioAI/CardioAI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = W9464NC4J7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -449,7 +447,7 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_ENTITLEMENTS = CardioAI/CardioAI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = W9464NC4J7;
 				ENABLE_PREVIEWS = NO;
 				GENERATE_INFOPLIST_FILE = NO;

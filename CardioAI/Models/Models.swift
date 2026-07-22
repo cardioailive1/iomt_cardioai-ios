@@ -176,4 +176,20 @@ struct RPMFrame {
         diastolic    = data["diastolic"]   as? Double
         spo2         = data["spo2"]        as? Double
     }
+
+    /// Merge a new frame over a previous one, keeping the newest non-nil value
+    /// per field. A source may report vitals in separate partial frames — BLE
+    /// sends HR, BP, and SpO2 as distinct characteristic notifications, and the
+    /// HealthKit/Fitbit paths likewise attach SpO2/BP alongside HR — so a
+    /// partial frame must not blank the fields it doesn't carry.
+    init(merging new: RPMFrame, over old: RPMFrame?) {
+        deviceID     = new.deviceID.isEmpty  ? (old?.deviceID  ?? "") : new.deviceID
+        patientID    = new.patientID.isEmpty ? (old?.patientID ?? "") : new.patientID
+        timestamp    = new.timestamp
+        heartRate    = new.heartRate ?? old?.heartRate
+        systolic     = new.systolic  ?? old?.systolic
+        diastolic    = new.diastolic ?? old?.diastolic
+        spo2         = new.spo2       ?? old?.spo2
+        qualityScore = new.qualityScore
+    }
 }

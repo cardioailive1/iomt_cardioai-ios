@@ -21,6 +21,17 @@ final class HealthKitService {
     // data OUT to Apple Health for the patient's GP to see.
     private let readTypes: Set<HKObjectType> = [
         HKQuantityType(.heartRate),
+        // Extra vitals an Apple Watch / synced device may record. Pulled into
+        // the vitals pipeline alongside heart rate when present.
+        HKQuantityType(.oxygenSaturation),
+        HKQuantityType(.bloodPressureSystolic),
+        HKQuantityType(.bloodPressureDiastolic),
+        // Fitness (read-only, informational — Activity section / Fitness view).
+        // Unlike heart rate, these do NOT flow through the clinical AI pipeline
+        // or reach the care team — wellness context only.
+        HKQuantityType(.stepCount),
+        HKQuantityType(.activeEnergyBurned),
+        HKObjectType.workoutType(),
     ]
 
     private var heartRateQuery: HKQuery?
@@ -173,6 +184,138 @@ final class HealthKitService {
 
         guard !samples.isEmpty else { return }
         try? await store.save(samples)
+    }
+
+    // MARK: - Latest aux vitals (SpO2 / blood pressure)
+
+    /// Most recent blood-oxygen reading as a percentage (0–100), or nil if the
+    /// user's devices haven't recorded one. HealthKit stores it as a 0–1
+    /// fraction, converted here.
+    func fetchLatestSpO2() async -> Double? {
+        guard let fraction = await fetchLatest(quantityType: .oxygenSaturation, unit: .percent()) else { return nil }
+        return fraction * 100
+    }
+
+    /// Most recent systolic/diastolic pair (mmHg), or nil if unavailable.
+    func fetchLatestBloodPressure() async -> (systolic: Double, diastolic: Double)? {
+        async let sys = fetchLatest(quantityType: .bloodPressureSystolic,  unit: .millimeterOfMercury())
+        async let dia = fetchLatest(quantityType: .bloodPressureDiastolic, unit: .millimeterOfMercury())
+        guard let s = await sys, let d = await dia else { return nil }
+        return (s, d)
+    }
+
+    /// Value of the single most recent sample of `identifier`, or nil if none.
+    private func fetchLatest(quantityType identifier: HKQuantityTypeIdentifier, unit: HKUnit) async -> Double? {
+        guard HKHealthStore.isHealthDataAvailable() else { return nil }
+        let type = HKQuantityType(identifier)
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(sampleType: type, predicate: nil, limit: 1, sortDescriptors: [sort]) { _, samples, _ in
+                guard let sample = (samples as? [HKQuantitySample])?.first else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                continuation.resume(returning: sample.quantity.doubleValue(for: unit))
+            }
+            store.execute(query)
+        }
+    }
+
+    // MARK: - Fitness data (read-only, informational — Activity section)
+
+    /// Today's step count, summed from midnight to now.
+    func fetchTodaySteps() async -> Double {
+        await fetchSum(quantityType: .stepCount, unit: .count(), from: Calendar.current.startOfDay(for: Date()), to: Date())
+    }
+
+    /// Today's active energy burned, in kilocalories.
+    func fetchTodayActiveEnergy() async -> Double {
+        await fetchSum(quantityType: .activeEnergyBurned, unit: .kilocalorie(), from: Calendar.current.startOfDay(for: Date()), to: Date())
+    }
+
+    /// Daily step totals for the last `days` days (including today), oldest
+    /// first — used for the Fitness view's weekly trend chart.
+    func fetchStepsTrend(days: Int = 7) async -> [(date: Date, steps: Double)] {
+        var results: [(Date, Double)] = []
+        let calendar = Calendar.current
+        for offset in stride(from: days - 1, through: 0, by: -1) {
+            guard let dayStart = calendar.date(byAdding: .day, value: -offset, to: calendar.startOfDay(for: Date())),
+                  let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) else { continue }
+            let total = await fetchSum(quantityType: .stepCount, unit: .count(), from: dayStart, to: dayEnd)
+            results.append((dayStart, total))
+        }
+        return results
+    }
+
+    private func fetchSum(quantityType identifier: HKQuantityTypeIdentifier, unit: HKUnit, from start: Date, to end: Date) async -> Double {
+        guard HKHealthStore.isHealthDataAvailable() else { return 0 }
+        let type = HKQuantityType(identifier)
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+
+        return await withCheckedContinuation { continuation in
+            let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, statistics, error in
+                guard error == nil, let sum = statistics?.sumQuantity() else {
+                    continuation.resume(returning: 0)
+                    return
+                }
+                continuation.resume(returning: sum.doubleValue(for: unit))
+            }
+            store.execute(query)
+        }
+    }
+
+    /// Recent workouts (any type — running, cycling, strength, etc.),
+    /// most recent first.
+    func fetchRecentWorkouts(limit: Int = 10) async -> [WorkoutSummary] {
+        guard HKHealthStore.isHealthDataAvailable() else { return [] }
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(sampleType: .workoutType(), predicate: nil, limit: limit, sortDescriptors: [sortDescriptor]) { _, samples, error in
+                guard error == nil, let workouts = samples as? [HKWorkout] else {
+                    continuation.resume(returning: [])
+                    return
+                }
+                let summaries = workouts.map { workout in
+                    WorkoutSummary(
+                        activityType: workout.workoutActivityType.displayName,
+                        startDate: workout.startDate,
+                        durationSeconds: workout.duration,
+                        activeEnergyKcal: workout.statistics(for: HKQuantityType(.activeEnergyBurned))?
+                            .sumQuantity()?.doubleValue(for: .kilocalorie())
+                    )
+                }
+                continuation.resume(returning: summaries)
+            }
+            store.execute(query)
+        }
+    }
+}
+
+struct WorkoutSummary: Identifiable {
+    let id = UUID()
+    let activityType: String
+    let startDate: Date
+    let durationSeconds: TimeInterval
+    let activeEnergyKcal: Double?
+}
+
+private extension HKWorkoutActivityType {
+    /// Human-readable label — HealthKit only gives you the raw enum.
+    var displayName: String {
+        switch self {
+        case .running: return "Running"
+        case .walking: return "Walking"
+        case .cycling: return "Cycling"
+        case .swimming: return "Swimming"
+        case .traditionalStrengthTraining, .functionalStrengthTraining: return "Strength Training"
+        case .yoga: return "Yoga"
+        case .hiking: return "Hiking"
+        case .elliptical: return "Elliptical"
+        case .rowing: return "Rowing"
+        case .highIntensityIntervalTraining: return "HIIT"
+        default: return "Workout"
+        }
     }
 }
 

@@ -32,6 +32,11 @@ final class DashboardViewModel: ObservableObject {
     @Published private(set) var lastError:     String?           = nil
     @Published private(set) var lastUpdated:   Date?             = nil
 
+    // Fitness (read-only wellness — Activity section). Sourced from whichever
+    // source owns vitals: HealthKit by default, Google Health when Fitbit is active.
+    @Published private(set) var activitySteps: Double            = 0
+    @Published private(set) var activeEnergy:  Double            = 0
+
     // ── Dependencies ───────────────────────────────────────────────────────
     private let apiClient:      APIClient
     private let bridgeClient:   BridgeClient
@@ -70,6 +75,13 @@ final class DashboardViewModel: ObservableObject {
     }
 
     func refresh() async { await fetchAll() }
+
+    /// Reload today's steps + active energy from the active fitness source.
+    func refreshActivity() async {
+        let summary = await pairingService.fetchActivitySummary()
+        activitySteps = summary.steps
+        activeEnergy  = summary.activeEnergy
+    }
 
     // MARK: Fetch
 
@@ -119,7 +131,9 @@ final class DashboardViewModel: ObservableObject {
     }
 
     private func processFrame(_ frame: RPMFrame) {
-        latestFrame = frame
+        // Merge over the last frame so a partial reading (BLE BP-only / SpO2-only
+        // notification, or a HealthKit HR sample) doesn't blank the other vitals.
+        latestFrame = RPMFrame(merging: frame, over: latestFrame)
         let now = Date()
         append(&hrHistory,        frame.heartRate, at: now)
         append(&spo2History,      frame.spo2,      at: now)
@@ -276,6 +290,10 @@ struct DashboardView: View {
                     VitalsGridSection(vm: vm)
                         .padding(.horizontal, 16)
 
+                    // Fitness / activity (wellness — not sent to care team)
+                    ActivitySection(vm: vm, pairingService: pairingService)
+                        .padding(.horizontal, 16)
+
                     // Active alerts
                     if !vm.alerts.isEmpty {
                         AlertsCardSection(alerts: vm.alerts).padding(.horizontal, 16)
@@ -310,10 +328,21 @@ struct DashboardView: View {
                     }
                 }
             }
-            .refreshable { await vm.refresh() }
+            .refreshable { await vm.refresh(); await vm.refreshActivity() }
         }
-        .onAppear  { vm.startPolling() }
+        .onAppear  {
+            vm.startPolling()
+            // Re-fetch on every appearance (incl. returning to this tab after
+            // connecting a watch/Fitbit) — .task alone won't re-fire in a TabView.
+            Task { await vm.refreshActivity() }
+        }
         .onDisappear { vm.stopPolling() }
+        .task {
+            // Prompt once for the newly-added step/energy read types (existing
+            // users who only granted heart rate get asked), then load Activity.
+            await pairingService.ensureFitnessAuthorization()
+            await vm.refreshActivity()
+        }
     }
 }
 
@@ -958,6 +987,232 @@ struct StatusRow: View {
                 .contentTransition(.numericText())
             Text(label).font(.caption2).foregroundStyle(ColorPalette.inkSoft)
         }
+    }
+}
+
+// ============================================================================
+// MARK: - Activity (fitness) section + full fitness view
+// ============================================================================
+
+/// Home-screen fitness summary: steps + calories, with a "View all" link into
+/// the full fitness detail (trend + workouts). Read-only wellness data — not
+/// sent to the care team. Source follows vitals (HealthKit / Google Health).
+struct ActivitySection: View {
+    @ObservedObject var vm: DashboardViewModel
+    let pairingService: DevicePairingService
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            DSectionTitle(title: "Activity") {
+                NavigationLink { FitnessDetailView(pairingService: pairingService) } label: {
+                    LinkLabel(text: "View all")
+                }
+            }
+            HStack(spacing: 10) {
+                ActivityStatTile(
+                    icon: "figure.walk", tint: ColorPalette.greenSoft, color: ColorPalette.cardioGreen,
+                    label: "Steps", value: "\(Int(vm.activitySteps))"
+                )
+                ActivityStatTile(
+                    icon: "flame.fill", tint: ColorPalette.redSoft, color: ColorPalette.cardioAmber,
+                    label: "Calories", value: "\(Int(vm.activeEnergy)) kcal"
+                )
+            }
+        }
+    }
+}
+
+struct ActivityStatTile: View {
+    let icon: String
+    let tint: Color
+    let color: Color
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(tint).frame(width: 28, height: 28)
+                    Image(systemName: icon)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(color)
+                }
+                Text(label)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(ColorPalette.inkSoft)
+                Spacer(minLength: 0)
+            }
+            Text(value)
+                .font(.system(size: 24, weight: .heavy))
+                .tracking(-0.6)
+                .foregroundStyle(value.hasPrefix("0") ? ColorPalette.inkMute : ColorPalette.ink)
+                .contentTransition(.numericText())
+                .animation(.spring(duration: 0.4), value: value)
+        }
+        .padding(EdgeInsets(top: 14, leading: 14, bottom: 12, trailing: 14))
+        .frame(maxWidth: .infinity, minHeight: 84, alignment: .topLeading)
+        .designCard(cornerRadius: 18)
+    }
+}
+
+/// Full fitness detail — pushed from the Activity section's "View all". Shows
+/// today's totals, a weekly step trend, and recent workouts. Source-aware:
+/// steps/energy/trend follow the active vitals source; workouts are HealthKit.
+struct FitnessDetailView: View {
+    let pairingService: DevicePairingService
+
+    @State private var isLoading = true
+    @State private var todaySteps: Double = 0
+    @State private var todayActiveEnergy: Double = 0
+    @State private var stepsTrend: [(date: Date, steps: Double)] = []
+    @State private var recentWorkouts: [WorkoutSummary] = []
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                statsRow
+                weeklyTrendCard
+                workoutsSection
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .background(ColorPalette.screenBackground.ignoresSafeArea())
+        .navigationTitle("Fitness")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await load() }
+        .refreshable { await load() }
+    }
+
+    // MARK: Stats
+
+    private var statsRow: some View {
+        HStack(spacing: 10) {
+            ActivityStatTile(
+                icon: "figure.walk", tint: ColorPalette.greenSoft, color: ColorPalette.cardioGreen,
+                label: "Steps Today", value: isLoading ? "—" : "\(Int(todaySteps))"
+            )
+            ActivityStatTile(
+                icon: "flame.fill", tint: ColorPalette.redSoft, color: ColorPalette.cardioAmber,
+                label: "Active Energy", value: isLoading ? "—" : "\(Int(todayActiveEnergy)) kcal"
+            )
+        }
+    }
+
+    // MARK: Weekly trend
+
+    private var weeklyTrendCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("This Week")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(ColorPalette.ink)
+            if stepsTrend.filter({ $0.steps > 0 }).isEmpty {
+                Text(isLoading ? "Loading…" : "No step data yet this week")
+                    .font(.system(size: 13))
+                    .foregroundStyle(ColorPalette.inkSoft)
+                    .frame(maxWidth: .infinity, minHeight: 80)
+            } else {
+                weeklyBarChart
+            }
+        }
+        .padding(18)
+        .designCard(cornerRadius: 20)
+    }
+
+    private var weeklyBarChart: some View {
+        let maxSteps = max(stepsTrend.map(\.steps).max() ?? 1, 1)
+        return HStack(alignment: .bottom, spacing: 8) {
+            ForEach(stepsTrend, id: \.date) { entry in
+                VStack(spacing: 6) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(ColorPalette.cardioGreen.opacity(0.85))
+                        .frame(height: max(4, CGFloat(entry.steps / maxSteps) * 110))
+                    Text(dayLabel(entry.date))
+                        .font(.system(size: 10))
+                        .foregroundStyle(ColorPalette.inkSoft)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .frame(height: 140)
+    }
+
+    private func dayLabel(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "E"
+        return String(f.string(from: date).prefix(1)).uppercased()
+    }
+
+    // MARK: Workouts
+
+    private var workoutsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Recent Workouts")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(ColorPalette.ink)
+            if recentWorkouts.isEmpty {
+                Text(isLoading ? "Loading…" : "No recent workouts found")
+                    .font(.system(size: 13))
+                    .foregroundStyle(ColorPalette.inkSoft)
+                    .frame(maxWidth: .infinity, minHeight: 60)
+                    .designCard(cornerRadius: 20)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(recentWorkouts) { workout in
+                        FitnessWorkoutRow(workout: workout)
+                    }
+                }
+                .padding(.horizontal, 18)
+                .designCard(cornerRadius: 20)
+            }
+        }
+    }
+
+    // MARK: Load
+
+    private func load() async {
+        isLoading = true
+        await pairingService.ensureFitnessAuthorization()
+        async let summary = pairingService.fetchActivitySummary()
+        async let trend = pairingService.fetchStepsTrend(days: 7)
+        async let workouts = pairingService.fetchRecentWorkouts(limit: 5)
+        let s = await summary
+        todaySteps = s.steps
+        todayActiveEnergy = s.activeEnergy
+        stepsTrend = await trend
+        recentWorkouts = await workouts
+        isLoading = false
+    }
+}
+
+private struct FitnessWorkoutRow: View {
+    let workout: WorkoutSummary
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(workout.activityType)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(ColorPalette.ink)
+                Text(workout.startDate.formatted(date: .abbreviated, time: .shortened))
+                    .font(.system(size: 12))
+                    .foregroundStyle(ColorPalette.inkSoft)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(Int(workout.durationSeconds / 60)) min")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(ColorPalette.ink)
+                if let kcal = workout.activeEnergyKcal {
+                    Text("\(Int(kcal)) kcal")
+                        .font(.system(size: 12))
+                        .foregroundStyle(ColorPalette.inkSoft)
+                }
+            }
+        }
+        .padding(.vertical, 12)
     }
 }
 
