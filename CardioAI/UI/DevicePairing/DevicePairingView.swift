@@ -186,10 +186,8 @@ struct ExternalSourcesSection: View {
     @State private var showingWatchSheet  = false
     @State private var isConnectingFitbit = false
 
-    // Fitbit hidden until FitbitService is migrated from the legacy Fitbit
-    // Web API (sunsets Sept 2026, new-app registration closed) to the new
     // Google Health API. Flip to true once that rewrite lands.
-    private let fitbitEnabled = true
+    private let fitbitEnabled = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
